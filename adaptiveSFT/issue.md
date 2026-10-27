@@ -1,0 +1,377 @@
+# issue.md — adaptiveSFT 目前遇到的所有問題、能不能解、怎麼解
+
+> 直接回答：**跟 `lnrm2.stan` 有關的問題，PyMC + PyTensor 全部能解，而且已經解完**
+> （`model_lnrm2.py`）。**跟 R 有關的問題，PyMC 幫不上，但都是一行到五行的修法。**
+> **真正無解的只有一種：檔案不在 repo 裡**（`lnrm2a.stan`、`lnrm1.stan`、`lnrm0.stan`、
+> `post95.Rdata`、輸入 csv）。這不是版本問題，是東西沒了。
+>
+> R 端逐項證據（每條都在 R 4.3.3 / stanc 2.32.2 + 2.39.0 上重現過）見
+> `r_version_inventory.md`（subagent 寫，英文，行號我抽驗過）。
+
+```
+   問題來源                 PyMC/PyTensor 能解？    解法
+   ─────────────────────────────────────────────────────────────────────────
+   R 4.2 改了 if() 規則      ✘ 跟 PyMC 無關          R 改一行 (R1)
+   Stan 2.33 改了陣列語法    ✔ 走 PyMC 就繞過        或 Stan 改五行 (S1)
+   PyMC 內建 RV 拼不出 race  ✔ 已解                  pt.Op + numba (M1–M7)
+   pystan 2 API 死了         ✔ 換 PyMC               adaptive_sft2.py 重寫 (P3)
+   .stan / .Rdata / csv 遺失 ✘ 誰都不能              問原作者 (S2, R5)
+   2018 程式本身的 bug       ✘ 跟版本無關            逐個修 (R6, P1, P2)
+```
+
+---
+
+## 1. R 端（版本更改造成的）
+
+### R1 `if()` 條件長度 > 1 — R 4.2.0 起是錯誤 — **可解，一行**
+
+**程式碼字面** `adaptiveSFT_functions.R:228`：
+
+```r
+  if (post.diff$alpha2 <0) {
+```
+
+`post.diff` 是 `extract(fitModel, ...)`（`:219`）的結果，`$alpha2` 是 4000 筆後驗抽樣，
+不是一個數。
+
+**誰改了什麼**：R < 4.2 只警告 `only the first element will be used`，拿第一筆決定；
+R ≥ 4.2.0 直接報錯。R 4.3.3 重現：
+
+```
+Error in if (post.diff$alpha2 < 0) 1 : the condition has length > 1
+```
+
+**舊 R 實際行為**（這是推導，不是字面）：
+
+```
+   alpha2[1] < 0   ──►  全部 4000 筆都代進公式，mean(…, na.rm=TRUE)   (:279)
+   alpha2[1] ≥ 0   ──►  h_targ.dist 沒被賦值 ──► :279 object not found
+```
+
+**解法**（不改 repo，由 owner 決定後再套）。最小修法是把 `if` 拆掉，
+讓公式無條件跑：
+
+```r
+  # 刪掉 :228 的 if (...) { 和 :233 的 }，中間四行原封不動
+  l_targ.dist <- with(post.diff,
+        (-alpha/alpha2 - sqrt( (alpha/alpha2)^2 + 2 / alpha2 * l_targ)) / 2)
+  h_targ.dist <- with(post.diff,
+        (-alpha/alpha2 - sqrt( (alpha/alpha2)^2 + 2 / alpha2 * h_targ)) / 2)
+```
+
+**數值會不會變**：舊 R 只要第一筆 draw 的 `alpha2 < 0` 就會把**全部** draw
+（含 `alpha2 > 0` 的）代進公式再 `mean(na.rm=TRUE)`。刪掉 `if` 之後走的就是這條路，
+所以舊碼能算出來的數字一個 bit 都不變；消失的只是「第一筆抽到正數就 object not found」
+那條失敗路。
+
+其他寫法都會改數值，要 owner 拍板：
+
+| 寫法 | 跟舊碼比 |
+|---|---|
+| 刪 `if`（上面） | 成功路徑完全相同 |
+| `if (all(alpha2 < 0))` | 通過時相同，否則整個函式停 |
+| `if (mean(alpha2) < 0)` | 通過時相同，否則整個函式停 |
+| `ifelse(alpha2 < 0, 公式, NaN)` | **不同**。`alpha2 > 0` 且 target > 0 時判別式 `(α/α₂)² + 2·target/α₂` 恆正，舊碼一直有把這些 draw 算進平均；遮掉後只要後驗跨過 0，high/low 就會變 |
+
+同類潛伏案例：`psiSimulation_functions.R:45` `if (is.na(prior)) {`。現在 `prior <- NA`
+是純量所以沒事，一旦傳真正的 prior 陣列進去就炸。改 `if (all(is.na(prior)))`。
+
+### R2 rstan 的 Stan 語言版本由 StanHeaders 決定 — **推翻之前的說法**
+
+之前的文件（`plan_r_modernization.md`、`lnrm2_pymc_gaps.md`）說「CRAN rstan 仍綁
+Stan 2.32，`real x[N]` 還能編」。**錯。** rstan 2.32.7 只要求 `StanHeaders >= 2.32.0`，
+parser 是從 `StanHeaders/inst/stanc.js` 載入的（`rstan/R/zzz.R:29-30`）。CRAN 現在的
+StanHeaders 是 2.39.1，帶 stanc 2.39.0，**會拒絕 `lnrm2.stan`**：
+
+```
+Syntax error in 'string', line 3, column 18 to column 19, parsing error:
+     3:     real intensity[N];
+                           ^
+Ill-formed declaration. ";" expected after variable declaration.
+  It looks like you are trying to use the old array syntax.
+```
+
+所以「裝新 R + 新 rstan 就能跑」是假的，S1 的五行一定要改。
+
+### R3 rstan 呼叫參數 — **沒壞**
+
+`stan(file=, data=, pars=, open_progress=)`、`extract(fit, pars)` 都還是合法簽名。
+唯一小毛病：`simulateLNRM_ogival.R:158` 寫 `permute=TRUE`，正式參數名是 `permuted`，
+靠 S4 partial match 撐著。改成 `permuted=TRUE`。
+
+### R4 `stringsAsFactors`、`class(x)=="matrix"`、`sample()` — **沒中**
+
+三個常見的 R 4.0 / 3.6 陷阱，五個 R 檔都沒踩到。不用改。
+
+### R5 檔案不在 repo — **不可解**
+
+| 誰引用 | 檔名 | 狀態 |
+|---|---|---|
+| `adaptiveSFT_functions.R:185`、`simulateLNRM_ogival.R:62` | `lnrm2a.stan`（ogival 模型，**每個腳本實際用的都是這個**） | 沒有 |
+| `adaptiveSFT_functions.R:210` | `lnrm1.stan` | 沒有 |
+| `simulateLNRM_ogival.R:157` | `lnrm0.stan` | 沒有 |
+| `simulateLNRM_ogival.R:111` | `post95.Rdata` | 沒有 |
+| `psi Simulation_26MAR2019.R:507,510` | `Psi_Simulation_SFTresults.csv`、`PsiDDM_Simulation_Pars.csv` | 沒有，且前者的欄位跟 2018 腳本寫出來的對不上 |
+
+`git log --all` 顯示 repo 從第一個 commit 起就只有 `lnrm2.stan` 一個 Stan 檔。
+**只有原作者能補。**
+
+### R6 2018 程式本身的 bug（跟版本無關，但一樣擋路）
+
+| 位置 | 字面 | 問題 | 修法 |
+|---|---|---|---|
+| `adaptiveSFT_functions.R:11` | `with(postSamps, L * inv_logit(...))` | `L` 不在 pars 裡，只在 `simulateLNRM_ogival.R:26` 定義成全域 | 加參數 `L = 10` |
+| `adaptiveSFT_functions.R:98` | `sigmasq=sigmasqx` | 打錯字 | 改 `sigmasq` |
+| `adaptiveSFT_functions.R:184` | `if (anyNA(fitModel))` 對 S4 stanfit | 會警告但結果正確 | 改 `if (!is(fitModel, "stanfit"))` |
+| `psi Simulation_26MAR2019.R:535` 等 8 處 | `psi_color_ddm(result.color, nDFP, allpars[sn,])` 三個引數 | 定義 `psiSimulation_functions.R:173` 只收兩個 | 對齊簽名 |
+| `psi Simulation_25JUNE2018.R:62` | `x.axis` | 定義的是 `axis.x` | 改名 |
+| `psi Simulation_25JUNE2018.R:2`、`26MAR2019.R:2` | `setwd("C:/Users/w018elf/...")` | Windows 硬路徑，Linux/mac 第一行就死 | 刪掉 |
+| `psi Simulation_25JUNE2018.R:71` | `windows()` | Windows 專用繪圖裝置 | 改 `dev.new()` |
+| `simulateLNRM_ogival.R:571` | `dp[sn] <- ...` | `dp` 沒初始化 | 前面加 `dp <- c()` |
+
+完整清單（含 `rsamp`、`postOpt.diff`、`polynomial_order`、`N` 未定義等）見
+`r_version_inventory.md` F8–F9。
+
+**現況**：五個 R 檔在 R 4.3.3 都 `parse()` 得過，但沒有一個能跑到底。
+`find_salience_polynomial`（唯一用 `lnrm2.stan` 的函式）**沒有任何腳本呼叫它**——
+所有腳本走的都是 `find_salience_ogival` → 遺失的 `lnrm2a.stan`。
+
+---
+## 2. Stan 端 (`lnrm2.stan`)
+
+### S1 `real x[N]` 舊陣列語法 — **可解**
+
+**程式碼字面** `lnrm2.stan:3,4,6,9,20`：
+
+```stan
+   real intensity[N];                 // :3
+   int<lower=0,upper=1> correct[N];   // :4
+   real<lower=0> rt[N];               // :6
+   real square_intensity[N];          // :9
+   real z[2,N];                       // :20
+```
+
+**誰改了什麼**：Stan 2.33 (2023-09) 移除 `type name[N]` 語法，只接受
+`array[N] type name`。stanc 2.32.2 編得過（5 個 deprecation 警告）；
+stanc 2.39.0 直接 parse error。CRAN 新裝 rstan 會拿到 2.39.0（見 R2），
+cmdstanr / cmdstan ≥ 2.33 同樣拒絕。
+
+**解法**（5 行，語意完全不變；subagent 用 stanc 2.32.2 和 2.39.0 都驗過編譯通過）：
+
+```stan
+   array[N] real intensity;
+   array[N] int<lower=0,upper=1> correct;
+   array[N] real<lower=0> rt;
+   array[N] real square_intensity;
+   array[2,N] real z;
+```
+
+或者不改 Stan：走 PyMC（見 §4），`lnrm2.stan` 只留作對照文件。
+
+### S2 `lnrm0.stan` / `lnrm1.stan` / `lnrm2a.stan` 不在 repo — **不可解（檔案遺失）**
+
+`adaptiveSFT_functions.R:185` 呼叫 `lnrm2a.stan`，`:210` 呼叫 `lnrm1.stan`，
+`adaptive_sft2.py:167` 呼叫 `lnrm2a.stan`。三個檔案都不存在。
+`find_salience_ogival` 和 `polynomial_order=1` 這兩條路完全跑不了。
+只有 `polynomial_order=2`（用 `lnrm2.stan`）能跑。
+
+原作者已確認（使用者轉述）：a/b/c 都是 `lnrm2.stan` 的微改。
+所以可以用同一套 `pt.Op` 積木重建，只換「強度 → 難度」那條曲線
+（`model_lnrm2a.py`，ogival = `L · inv_logit(slope·(x − midpoint))`，從
+`adaptiveSFT_functions.R:11` 反推）。第一版 L = 10 時模型講不通
+（accuracy 99%、R-hat > 2）；原因是 `L` 是兩個累積器的**總**距離，每個累積器
+各偏 ½（`simulateLNRM_ogival.R:206-209` 的 `c(-.5,.5)*L`）。加上 ½ 之後
+L = 10 五個參數全部回收（R-hat ≤ 1.01）。經過見 `log.md`。
+剩下的假設（先驗、`L` 是不是常數）仍要原檔確認：`model_lnrm2a.py` 檔頭 TODO-A2–A5。
+
+### S3 `varZ` 命名陷阱 — **不是 bug，但要記得**
+
+`lnrm2.stan:38` `lognormal_lpdf(rt[tr] - psi | z[1,tr], varZ)`：
+`varZ` 在 **標準差** 的位置。R 端 `dlognormalrace`
+（`adaptiveSFT_functions.R:61-62`）卻做 `sqrt(sigmasq)`。
+移植時 PyMC 要傳 `sigma=varZ`，不能開根號。已在 `model_lnrm2.py` 照 Stan 做。
+
+---
+
+## 3. Python 端 (`adaptive_sft2.py`)
+
+這個檔案是 2018 年的半成品，三個硬錯誤：
+
+| # | 行 | 字面 | 問題 | 可解？ |
+|---|---|---|---|---|
+| P1 | `:12` | `posterior_samples['intensity']^2` | Python `^` 是 XOR 不是次方 | 可，改 `**2` |
+| P2 | `:27` | `for i in range(allchannels)` | `allchannels` 沒定義 | 可，改成 `len(mu)` |
+| P3 | `:2,:167,:172,:176` | `import pystan` / `pystan.StanModel` / `.sampling` / `.extract` | pystan 2 API；pystan 3 完全不同且已停止維護 | 可，換 cmdstanpy 或 PyMC |
+| P4 | `:167` | `file="lnrm2a.stan"` | 同 S2，檔案不存在 | 否 |
+| P5 | `:161,:176,:181-186` | `slope`, `midpoint` | 這是 lnrm2a (ogival) 的參數，不是 lnrm2 的 | 要換 lnrm2 就得改回 `alpha/alpha2` + 二次式反解（被註解在 `:158-160`） |
+
+**結論**：`adaptive_sft2.py` 沒有一條能跑的路。PyMC 可以取代它的 Stan 部分
+（`model_lnrm2.py`），但 P5 的反解和 `find_salience` 的流程要重寫。
+
+---
+
+## 4. PyMC / PyTensor 端 — 哪些解了、哪些沒解
+
+詳細在 `lnrm2_pymc_gaps.md`，這裡只列結論。
+
+```
+                     純 PyMC 內建 RV 路           pt.Op (numba) 路
+                     (lnrm2_pymc.py)              (model_lnrm2.py)
+   ──────────────────────────────────────────────────────────────────
+   lccdf 尾端 −inf      要繞 (Normal CDF)           解了 (erfc + 漸近級數)
+   observed = rt−psi    不行 → Potential            解了 (減法在 Op 裡)
+   逐題 if/else         pt.switch 向量化            解了 (numba 迴圈)
+   float32 尾端         要設 floatX                 解了 (固定 float64)
+   內建 Censored/Wald   錯或 −inf                   不需要
+   梯度 / NUTS          有                          沒有 → DEMetropolisZ
+   逐題 log_lik 精度    1e−6                        1e−14
+```
+
+| # | 問題 | 狀態 | 怎麼解 |
+|---|---|---|---|
+| M1 | `lognormal_lccdf` 在 PyMC 用 `log1mexp(logcdf)` → −inf | **已解** | `model_lnrm2.py` `log_norm_sf`：u ≤ 30 用 `erfc`，u > 30 用漸近級數；對 scipy 到 u=250 誤差 1e−16 |
+| M2 | `pm.CustomDist(observed=rt - psi)` 被拒（observed 必須是常數） | **已解** | `rt` 當 data 進 Op，`psi` 當參數，減法在 `perform` 裡；`pm.CustomDist("rt_obs", ..., logp=Op, observed=rt)` 驗過 = scipy |
+| M3 | `real<lower=0,upper=minRT> psi` 宣告即 prior | 不是問題 | 寫成 `pm.Uniform("psi", 0, min_rt)`，同一件事 |
+| M4 | 逐題 `if (correct[tr])` | **已解** | numba 迴圈 |
+| M5 | `transformed parameters` 沒有對應 block | 不是問題 | `pm.Deterministic`，要存才寫 |
+| M6 | float32 尾端下溢 | **已解** | numba float64 |
+| M7 | 用 `pm.LogNormal` + `pm.Censored` 拼 race | **放棄這條** | `Censored(LogNormal)` −inf、`Censored(Wald)` 尾端錯 11 個數量級；改走 Op |
+| M8 | Op 沒梯度 → 不能 NUTS | **未解** | 給 Op 寫 `grad`（`∂(ln f + ln S)/∂θ` 解析式）。DEMetropolisZ 目前夠用：1000 題 8 chains × 3000，R-hat 1.01，ESS ≥ 858 |
+| M9 | `mu` / `psi` 有 ridge，`mu` 回收略偏低 | 模型本身性質 | Stan 版也有，不是移植問題；加資料或給 `psi` 更緊的 prior |
+
+**所以「Stan 那部分」PyMC + PyTensor 全部能解，而且已經做完了。**
+
+---
+
+## 5. 誰能被 PyMC / PyTensor 解、誰不能
+
+```
+   adaptiveSFT 流程                                誰來解
+   ─────────────────────────────────────────────────────────────────────
+   模擬資料 (moc_ddm / dfp_ddm / simdiffT)    R ── 跟 PyMC 無關，要嘛修 R 要嘛用 numpy 重寫
+         |
+         v
+   dataframe2stan                             R ── 3 行，任何語言都行
+         |
+         v
+   lnrm2.stan 擬合                            ✔ PyMC：model_lnrm2.py 已完成
+         |
+         v
+   extract 後驗                               ✔ PyMC：az.extract(idata) 已完成
+         |
+         v
+   if (alpha2 < 0) 二次式反解 → high/low       R ── R 4.2 壞掉 (R1)；PyMC 無關；
+                                                     要嘛修 R 一行，要嘛 numpy 寫 4 行
+         |
+         v
+   psi Simulation_*.R 用 high/low 跑 DFP      R ── 跟 PyMC 無關
+```
+
+**直接回答「能不能用 pymc / pytensor 解決」：**
+
+- **能**：所有跟 `lnrm2.stan` 有關的（S1, S3, M1–M7）。已解，在 `model_lnrm2.py`。
+- **不能，但跟 PyMC 無關、各自另有解**：R 4.2 的 `if` 長度問題（R1，一行）、
+  pystan 2 API（P3，換工具）、`^` XOR（P1，一個字元）。
+- **真的不能**：`lnrm1.stan` / `lnrm2a.stan` 遺失（S2, P4）。這不是版本問題，
+  是檔案沒了，只有原作者能補。
+
+---
+
+## 6. 建議的最短路徑
+
+| 路徑 | 要動什麼 | 工作量 | 結果 |
+|---|---|---|---|
+| **A 修 R**（`plan_A_implementation.md`） | R 一行 (`:228`) + Stan 5 行 (S1) + 決定 `if` 語意 | 半天–2 天 | 原流程整條在 R 跑，只有 order=2 |
+| **B 全 Python** | `model_lnrm2.py` 已有；補 `find_salience`（反解 4 行）+ 模擬（numpy 重寫 `moc_ddm`/`dfp_ddm`） | 1–3 天 | 不用 R、不用 Stan；只有 order=2 |
+| **C 混合** | Stan 換 PyMC，反解和模擬留 R；用 `reticulate` 或存 csv 交換 | 1 天 | 兩套環境都要裝 |
+
+無論哪條，`lnrm2a` / `lnrm1` 路線都回不來，除非拿到檔案。
+
+**owner 要決定的事**（其他人替你決定不了）：
+
+1. `adaptiveSFT_functions.R:228` 舊 R 的 `if` 是「只看第一筆 draw」——修的時候要用
+   `mean(alpha2) < 0`、`all(alpha2 < 0)`，還是逐 draw 篩？三種數值結果不同。
+2. `lnrm2a.stan` / `lnrm1.stan` 去哪裡要。
+3. `varZ` 到底是 SD 還是 variance（Stan 當 SD，R 的 `dlognormalrace` 當 variance）。
+
+---
+
+## 7. lnrm2.stan 已經是 Python 之後，§1 / §2 每一項會怎樣
+
+結論先講：**只有 S1 消失。R2 一半消失一半還在。其餘 7 個全部還在，
+其中 S3 從「一種語言內部的命名陷阱」搬成「兩種語言之間的合約」。**
+
+### 逐項
+
+| 項目 | 改成 Python 後 | 為什麼 | 還要做什麼 |
+|---|---|---|---|
+| **R1** if 長度>1 | 還在 | 二次式反解 `l_targ.dist / h_targ.dist`（`adaptiveSFT_functions.R:229-232`）是 R 碼，`model_lnrm2.py` 只做到「後驗 {mu,alpha,alpha2,varZ,psi}」為止，沒有反解這一步。而且擋在它前面的 `if (post.diff$alpha2 <0)`（`:228`）本身就是死路：`find_salience_polynomial`（唯一含這段 if 的函式，`:203`）**沒有任何腳本呼叫**（`grep -rn "find_salience_polynomial"` 只中定義那一行；所有腳本呼叫的是 `find_salience_ogival`，`:180`）。| 要嘛把 `:229-232` 這 4 行连同 `if` 的語意決定（issue.md 給的 3 選 1）一起搬去 Python（用 numpy 4 行重寫），R1 才真正消失；要嘛繼續讓後驗流回 R 做反解，R1 原封不動留著。目前 repo 裡兩邊都沒做，所以是「還在」。 |
+| **R2** StanHeaders/stanc 版本 | 一半消失 | `model_lnrm2.py` 完全不呼叫 `rstan::stan()`，跑模型這條路徑不再經過 StanHeaders/stanc，這部分消失。但 `adaptiveSFT_functions.R:1-5` 是檔案最前面 5 行：`require(rstan)` / `require(diffIRT)` / `require(sft)` / `rstan_options(auto_write=TRUE)` / `options(mc.cores=...)`，其中第 4 行 `rstan_options()` 在沒裝 rstan 時直接報錯（`r_version_inventory.md` §1 已重現：`could not find function "rstan_options"`）。只要還有任何 R 腳本 `source("adaptiveSFT_functions.R")`（`simulateLNRM_ogival.R:1` 就是），**source 這個動作本身**仍需要能載入 rstan，跟 `stan()` 有沒有被呼叫無關。| 如果 R 端完全停用（連 `source()` 都不做）R2 才整個消失；只要 `adaptiveSFT_functions.R` 這個檔還被任何 R 腳本讀取，就要嘛裝好 rstan（连带面對 R2 原本的版本問題），要嘛把 `:1-5` 這幾行也拆掉/搬走。 |
+| **R3** rstan 呼叫參數（`permute=`） | 搬家 → 沒了對象 | 問題本來就只在 `simulateLNRM_ogival.R:158`（`extract(fitDiff0,"mu",permute=TRUE)`），這行呼叫的是 rstan 的 `extract()`。`model_lnrm2.py` 用 `az.extract(idata)`（issue.md §4），跟 rstan 無關。原本的 R3 沒有被「修好」，只是它所在的那個呼叫點（`simulateLNRM_ogival.R`）目前跟 Python 移植完全無關——這一行還是原封不動躺在 R 檔裡。| 若 `simulateLNRM_ogival.R:158` 這條路將來也要接上 Python 的 idata，此問題自然消失（因為呼叫者換了）；若這支 R 腳本仍要被跑，`permute=` 這個 R3 小毛病還在，跟本次移植無關，仍要單獨修成 `permuted=`。 |
+| **R4** stringsAsFactors 等 | 還在 | 跟 Stan/Python 完全無關；`r_version_inventory.md` F4/F5/F6 已確認三個陷阱都沒中招，是「不用改」而非「消失」——移植 Stan 不會讓它們變得更相關或更不相關。| 無（本來就不用做）。 |
+| **R5** lnrm2a/lnrm1/lnrm0.stan、post95.Rdata、csv 遺失 | 還在 | `model_lnrm2a.py` 檔頭明講：這是「從 R 端怎麼用它反推出來的，不是逐行移植」（`model_lnrm2a.py:1-6`），且列了 TODO-A1～A5（d 的公式、z 的對稱結構、slope/midpoint 先驗、L 是常數還是參數、mu/varZ/psi 先驗是否沿用 lnrm2）都未經原檔驗證；docstring 也寫實測 L=10 時模型講不通（accuracy 99%、R-hat>2），L=2 才正常，代表微改的地方不只 d。檔案本身仍然不存在，Python 重寫只是「用同一套積木照著行為猜」，不是「補回遺失檔案」。| 只有拿到原始 `lnrm2a.stan`/`lnrm1.stan`/`lnrm0.stan`/`post95.Rdata` 才能解掉，這件事跟語言無關。 |
+| **R6** 2018 程式 bug（L、sigmasqx、setwd、windows()、psi_color_ddm 三引數…） | 還在 | 這些 bug 全部長在 `psi Simulation_*.R`、`simulateLNRM_ogival.R`、`psiSimulation_functions.R` 這幾支模擬/繪圖腳本裡，`model_lnrm2.py` 只取代了 pipeline 裡「lnrm2.stan 擬合」那一個方框（見下圖），完全沒碰這些檔案。| 逐個修（issue.md R6 表已列修法），跟 Stan→Python 無關，要嘛繼續用 R 修，要嘛連這幾支腳本一起用 numpy 重寫。 |
+| **S1** `real x[N]` 舊陣列語法 | 消失 | Python 這條路徑完全不叫 Stan 編譯器（`model_lnrm2.py:20-26` import 的是 numpy/pytensor/pymc/arviz/numba，沒有 `pystan`/`cmdstanpy`），S1 是「stanc 編譯器拒絕舊語法」的問題，沒有 stanc 就沒有這個問題。`lnrm2.stan` 現在只是被讀出係數含意的對照文件。| 無，除非之後又要用 Stan/cmdstanr 編譯這個檔案。 |
+| **S2** lnrm2a/lnrm1/lnrm0.stan 遺失 | 還在（跟 R5 同一件事） | 跟 R5 是同一組遺失檔案，只是站在 Stan 側講。Python 重寫（`model_lnrm2a.py`）不能無中生有出原始 Stan 檔，見上面 R5 的 TODO 清單。| 同 R5：只能找原作者要檔案。 |
+| **S3** varZ 是 SD 但 `dlognormalrace` 取 sqrt | 還在，且搬成跨語言問題 | `lnrm2.stan:38-39` 把 `varZ` 直接放在 `lognormal_lpdf(...\| z[1,tr], varZ)` 的標準差位置。`model_lnrm2.py` 完全照做：`model_lnrm2.py:182` 註解明寫「名字叫 varZ，但在 Stan 是放在『標準差』位置；這裡照樣當標準差用」，`model_lnrm2.py:183` `varZ = pm.InverseGamma("varZ", ...)` 直接餵進 `lnrm_def_logpdf(t, m_win, m_lose, s)`（`model_lnrm2.py:67-73`）當 `s`（標準差）用，`model_lnrm2.py:194-202` 把這個 `varZ` 原封不動傳給 numba 核心。可是 R 端 `dlognormalrace`（`adaptiveSFT_functions.R:61-62`）寫的是 `sigma <- sqrt(sigmasq)`——把傳進來的參數當**變異數**再開根號。| 若之後把 Python 估出的 `varZ` 後驗交回 R 的 `dlognormalrace` 使用，必須先確認呼叫端要傳「SD 本身」還是「SD²」，並在交界處補一行轉換（或幫 `dlognormalrace` 加參數名區分 sd/var），否則會被多開一次根號，數值全錯。 |
+
+### Pipeline 現況圖
+
+```
+模擬資料 (moc_ddm/dfp_ddm/simdiffT)        [R]  psi Simulation_*.R, simulateLNRM_ogival.R
+        │                                        R6 全部還在這裡
+        v
+dataframe2stan                             [R]  adaptiveSFT_functions.R
+        │
+        v
+┌───────────────────────────────────────────────────────────┐
+│ lnrm2.stan 擬合          →→→  已搬成 model_lnrm2.py  [PY]  │
+│   S1 (陣列語法)  ─────────────────────────► 消失            │
+│   S3 (varZ=SD)   ─────────────────────────► 還在，且變成    │
+│                                              PY↔R 交界問題   │
+└───────────────────────────────────────────────────────────┘
+        │
+        v
+extract 後驗                                [PY] az.extract(idata)
+        │
+        ▼  ← 這裡是斷點：Python 只做到後驗，反解沒接上
+if(alpha2<0) 二次式反解 → high/low          [R]  adaptiveSFT_functions.R:228-232
+   R1 (if 長度>1)   ── 還在（且此函式根本沒人呼叫）
+   R2 (rstan 載入)  ── 一半消失：stan() 不用了，但 :1-5 的
+                        require(rstan)/rstan_options() 仍卡住 source()
+        │
+        v
+psi Simulation_*.R 用 high/low 跑 DFP       [R]
+   R3(permute=)/R4(無事)/R6 全部還在這裡
+        │
+        ✕  S2/R5：lnrm2a/lnrm1/lnrm0.stan、post95.Rdata、輸入 csv 全都沒有
+             model_lnrm2a.py 只是帶 TODO-A1~A5 的猜測重建，不算補回
+```
+
+### 結論
+
+Python 移植只把「lnrm2.stan 擬合」這一個方框換掉，真正消失的只有 S1（陣列語法，
+根本原因是 stanc 編譯器不再被呼叫）；R2 因為 `:1-5` 無條件載入 rstan，只消失了一半。
+其餘 7 項（R1、R3–R6、S2、S3）全部原封不動留在 pipeline 的其他方框裡，
+S3 甚至因為新增了 Python/R 兩套「varZ 是 SD 還是 variance」的假設而變成新的交界風險。
+
+---
+
+## 8. 最終狀態（2026-09-30，Python 版 `adaptivesft/` 完成後）
+
+| 項目 | 狀態 | 在哪 |
+|---|---|---|
+| R1 `if (alpha2 < 0)` | 定案：`alpha2_rule` 參數，預設 `all_draws`（舊 R 成功路徑，數值不變）；`first_draw` 重現舊 R | `adaptivesft/salience.py` |
+| R2 / R3 / S1 | 消失：不呼叫 rstan、不編 Stan；Stan 比對用 `stan/lnrm2_array.stan`（只改五行語法） | `docs/stan_comparison_redhat.md` |
+| R4 | 本來就沒中 | — |
+| R5 / S2 遺失檔 | 不可解；`link="none" / "linear" / "ogival"` 是重建，先驗是猜的 | `adaptivesft/models.py`、`decisions_for_author.md` B |
+| R6 2018 腳本 bug | 不移植那些腳本；函式層重寫並對 R 原碼比對 | `scripts/`、`tests/test_parity_demo.py` |
+| S3 `varZ` | 定案：SD；R 的 `simulateLNRM_ogival.R:204/213/258/281` 把 SD 塞進變異數位是 R 自己的錯 | `adaptivesft/race.py` |
+| P1–P5 `adaptive_sft2.py` | 作廢 | — |
+| M1–M7 | 沿用 numba Op 版並加純 PyTensor 版（兩者 logp 差 < 1e−8） | `adaptivesft/models.py` |
+| M8 Op 沒梯度 | 解了：預設 `sampler="nuts"` 用 PyTensor 運算式，有梯度；DEMetropolisZ 留作選項 | 同上 |
+| M9 `mu` / `psi` ridge | 模型性質，未變 | — |
+| 新：`a` 的意義差 2 倍 | 做成 `a_is_separation` 參數，兩種都跑 | `decisions_for_author.md` A、`p6_results.md` |
+| 新：`.99` 落在範圍外 | `salience_levels(x_range=)` 警告；根因同上 | `adaptivesft/psi.py` |
+| 新：diffIRT 拒絕抽樣在 a·drift ≳ 26 停滯 | a·|drift| > 20 改 Euler 模擬 | `adaptivesft/ddm.py` |
+| 與 R 原碼的比對 | `sft::sic` 1e−12、`simdiffT` 分布、Psi 迴圈逐試 1e−13（顏色、方位兩組網格）；LNRM 對 Stan（cmdstanr 2.40.0）五個參數後驗平均差 ≤ 0.01 SD | `tests/data/`、`scripts/demo_parity.py` |

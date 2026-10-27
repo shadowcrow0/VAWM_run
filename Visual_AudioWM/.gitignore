@@ -1,0 +1,16 @@
+# Python 快取
+__pycache__/
+*.pyc
+
+# Claude Code 本機設定
+.claude/*
+!.claude/skills/
+
+# GRTv3 執行期即時混出來的聲音刺激(每人約 130 MB)。可由 CSV 裡每一試的
+# snd_* 欄位(dB + 噪音種子)位元重建,不需要進版控。
+*_snr/
+*_snrpool/
+adaptivesft_path.txt
+
+# audio_pick.py --set 記下的輸出裝置名稱（每台機器不同）
+audio_device.txt

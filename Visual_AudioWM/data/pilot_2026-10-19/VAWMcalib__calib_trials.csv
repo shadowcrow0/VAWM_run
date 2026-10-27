@@ -1,0 +1,5 @@
+audio1_target_file,audio2_target_file,block,color1_target,color2_target,correct,is_match,key,probe_colour,probe_of,probe_sound,r,rt,trial_no,x,x_index,x_planned
+stimuli/T08_s3.wav,stimuli/T10_d3.wav,colour,#B3564C,#337612,0,False,y,#D7803E,1,stimuli/T08_s3.wav,0,14.096729900000355,1,30.000000000000007,,30.0
+stimuli/T11_b3.wav,stimuli/T01_v3.wav,colour,#D25E40,#D35398,0,False,y,#C73A76,2,stimuli/T01_v3.wav,0,21.865139600000475,2,11.999999999999998,,12.0
+stimuli/T01_eth3.wav,stimuli/T12_s3.wav,colour,#A44495,#3D93D3,0,False,y,#4395D3,2,stimuli/T12_s3.wav,0,29.859387500000594,3,2.000000000000002,,2.0
+stimuli/T11_f3.wav,stimuli/T03_g3.wav,colour,#9482C9,#A38E2E,1,True,y,#A38E2E,2,stimuli/T03_g3.wav,0,36.940203800000745,4,0.0,,

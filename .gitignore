@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.egg-info/
+Visual_AudioWM/audio_device.txt
+Visual_AudioWM/data/*_snr/
+Visual_AudioWM/data/*_snrpool/

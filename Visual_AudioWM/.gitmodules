@@ -1,0 +1,3 @@
+[submodule "Adaptive-GRT"]
+	path = Adaptive-GRT
+	url = https://github.com/shadowcrow0/Adaptive-GRT.git

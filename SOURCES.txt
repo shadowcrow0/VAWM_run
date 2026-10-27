@@ -1,0 +1,6 @@
+Snapshot of two GitHub repositories (flat copies, no nested .git):
+
+  Visual_AudioWM/  https://github.com/shadowcrow0/Visual_AudioWM  main   deb1928
+  adaptiveSFT/     https://github.com/shadowcrow0/adaptiveSFT     master 32281dd
+
+To refresh: pull both upstream repos and copy them over these folders (see README.md, "Updating this folder").
