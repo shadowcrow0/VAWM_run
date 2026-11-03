@@ -99,6 +99,58 @@ Command-line options (append to the bat or run the script yourself):
 | `--list-audio` | only print the device table and exit |
 | `--robot --quick` | no window, simulated participant, short fits (self-test) |
 
+## Running from PowerShell instead of the .bat files
+
+Open PowerShell in the `Visual_AudioWM` folder (Shift + right-click → "Open PowerShell window here", or
+`cd` there). PowerShell needs `&` in front of a quoted program path. One command per step:
+
+```powershell
+cd "C:\path\to\VAWM_run\Visual_AudioWM"
+```
+
+Step 1 — list the sound devices, open each, play a tone on the chosen one:
+
+```powershell
+& "C:\Program Files\PsychoPy\python.exe" audio_pick.py --probe --beep
+```
+
+Step 1b — remember the headphones by (part of) their name:
+
+```powershell
+& "C:\Program Files\PsychoPy\python.exe" audio_pick.py --set "Headphones" --beep
+```
+
+Step 2 — install PyMC + nutpie + the adaptivesft package into PsychoPy (once per PC):
+
+```powershell
+.\setup_pymc_coder.bat ..\adaptiveSFT
+```
+
+Step 3 — check everything:
+
+```powershell
+& "C:\Program Files\PsychoPy\python.exe" debug_adaptivesft_EN.py
+```
+
+Step 4 — sound perception test (~6 min):
+
+```powershell
+& "C:\Program Files\PsychoPy\python.exe" sound_perception_EN.py --require-headphones
+```
+
+Step 5 — the experiment (and the windowless self-test with a simulated participant):
+
+```powershell
+& "C:\Program Files\PsychoPy\python.exe" SFT_WM_nochange_EN.py --require-headphones
+```
+
+```powershell
+& "C:\Program Files\PsychoPy\python.exe" SFT_WM_nochange_EN.py --robot --quick
+```
+
+Paste one line at a time (pasting a comment together with a command breaks the line). If PsychoPy is installed
+elsewhere, replace the path. In the classic Command Prompt (cmd.exe) drop the leading `&`.
+
 ## If something fails
 
 | symptom | cause / fix |
