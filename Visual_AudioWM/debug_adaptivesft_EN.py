@@ -4,6 +4,7 @@
 debug_adaptivesft.py: one-click diagnosis of the whole adaptiveSFT calibration chain from inside PsychoPy Coder (open this file in Coder and Run; no arguments, every switch is in the settings section below): 0 environment, 1 find the adaptiveSFT fork, 2 import adaptive_vawm, 3 METHOD capability check, 4 windowless Psi simulation, 5 shortened LNRM fit (PyMC only), 6 a few real trials in a small window (RUN_WINDOW_TRIALS > 0 only); every failure prints why and how to fix it.
 """
 import os
+import re
 import sys
 import time
 import traceback
@@ -77,7 +78,7 @@ except Exception as e:
     bad(f"pymc missing ({type(e).__name__}) → METHOD='lnrm' will crash after the 72 trials, at the 'Calculating' screen")
     fix("in this PsychoPy Coder environment only METHOD='psi' works; for lnrm set up the conda environment as described in adaptive_vawm.md")
     HAVE_PYMC = False
-for f in ("adaptive_vawm.py", "generate_trials.py", "stimuli/T01_b3.wav", "stimuli/T12_p3.wav"):
+for f in ("adaptive_vawm_EN.py", "audio_pick.py", "generate_trials.py", "stimuli/T01_b3.wav", "stimuli/T12_p3.wav"):
     (ok if os.path.exists(f) else bad)(f"{f}")
 
 hdr(1, "find the adaptiveSFT fork (must contain adaptivesft/psi.py)")
@@ -152,7 +153,7 @@ try:
     LNRM_OK = True
 except Exception as e:
     bad(f"lnrm: {type(e).__name__}: {str(e)[:90]}")
-    fix("change METHOD = \"lnrm\" to \"psi\" on line 73 of VAWM_calibrate.py, or run in an environment that has PyMC")
+    fix("the SFT_WM_*_EN.py scripts need PyMC for the lnrm fit: run setup_pymc_coder.bat ..\\adaptiveSFT (see README_RUN.md)")
 
 hdr(4, f"windowless simulation: PsiCalibrator, {N_SIM} trials per dimension")
 from scipy.stats import norm
@@ -219,8 +220,11 @@ else:
         from adaptivesft.race import lnrm_random
         dim = "colour"
         rng = np.random.default_rng(SIM_SEED)
-        cal = A.LNRMCalibrator(dim, n_per_level=6, seed=SIM_SEED, **LNRM_FIT_KW)
-        print(f"  planned {cal.n_trials} trials (6 levels × 6 + AA)")
+        # the simulated observer below (α ≈ 1) cannot reach the experiment's target 8.0 within the stimulus range, so this
+        # self-test uses 2.0 / 0.5 and the old levels: it checks that the pipeline runs, not the experiment's settings
+        levels = [2.0, 6.0, 12.0, 20.0, 30.0, 45.0] if dim == "colour" else None
+        cal = A.LNRMCalibrator(dim, levels=levels, n_per_level=6, h_targ=2.0, l_targ=0.5, seed=SIM_SEED, **LNRM_FIT_KW)
+        print(f"  planned {cal.n_trials} trials (6 levels × 6 + AA; self-test targets 2.0 / 0.5)")
 
         def respond(trial):
             if trial["is_match"]:
@@ -318,28 +322,32 @@ else:
     win.close()
     ok("window flow completed (no finish(); too few trials)")
 
-hdr(7, "VAWM_calibrate.py head dry-run (import, pick the audio device, build the calibrator; stops before the dialog)")
+hdr(7, "audio output device (what SFT_WM_*_EN.py will use) and the calibrator settings of SFT_WM_nochange_EN.py")
 if not HAVE_PSYCHOPY:
     print("  skipped (no psychopy)")
 else:
     try:
-        _src = open("VAWM_calibrate.py", encoding="utf-8").read().split("expInfo = {")[0]
-        _ns = {"__name__": "_vawm_head", "__file__": os.path.abspath("VAWM_calibrate.py")}
-        exec(compile(_src, "VAWM_calibrate.py(head)", "exec"), _ns)
-        ok(f"METHOD={_ns['METHOD']!r}  FIT_KW={_ns.get('FIT_KW')}")
-        if _ns["METHOD"] == "lnrm" and not LNRM_OK:
-            bad("METHOD is lnrm but this environment cannot fit it (see step 3)")
-        _cal = (A.LNRMCalibrator("colour", n_per_level=_ns["N_PER_LEVEL"], p_match=_ns["P_MATCH"], seed=1,
-                                 **_ns.get("FIT_KW", {})) if _ns["METHOD"] == "lnrm"
-                else A.PsiCalibrator("colour", seed=1))
-        _t = _cal.next_trial()
-        ok(f"first trial can be built: probe {_t['probe_colour']} + {_t['probe_sound']}"
-           f" ({'file exists' if os.path.exists(_t['probe_sound']) else 'file missing ✘'})")
-        print("  ↑ the [audio] line above is the speaker/headphone the experiment will use; if it is wrong, change audioDevice in the PsychoPy preferences")
-    except SystemExit:
-        bad("the head of VAWM_calibrate.py called core.quit() (most likely an audio-device or window problem; see the messages above)")
+        import audio_pick
+        _info = audio_pick.select_output_device(*audio_pick.parse_argv([])[:2])
+        (ok if _info["is_headphones"] or _info["explicit"] else bad)(
+            f"audio device: {_info['name']!r} ({'named' if _info['explicit'] else 'auto'}; candidates {_info['candidates']})")
+        if not (_info["is_headphones"] or _info["explicit"]):
+            fix("plug in headphones, or run: python audio_pick.py --probe --beep, then python audio_pick.py --set \"<name>\"")
     except Exception:
-        bad("the head of VAWM_calibrate.py failed:")
+        bad("audio_pick could not choose an output device:")
+        traceback.print_exc()
+    try:
+        _src = open("SFT_WM_nochange_EN.py", encoding="utf-8").read()
+        _m = re.search(r"\nH_TARG, L_TARG = ([^#\n]+)", _src)
+        _lv = re.search(r"\nLEVELS_COLOUR = ([^#\n]+)", _src)
+        _np = re.search(r"\nN_PER_LEVEL = (\d+)", _src)
+        ok(f"SFT_WM_nochange_EN.py: targets {_m.group(1).strip()}  colour levels {_lv.group(1).strip()}  per level {_np.group(1)}")
+        _cal = A.LNRMCalibrator("colour", seed=1)
+        _t = _cal.next_trial()
+        ok(f"first calibration trial can be built: probe {_t['probe_colour']} + {_t['probe_sound']}"
+           f" ({'file exists' if os.path.exists(_t['probe_sound']) else 'file missing ✘'})")
+    except Exception:
+        bad("could not read SFT_WM_nochange_EN.py / build the first trial:")
         traceback.print_exc()
 
 print("\n" + "=" * W)

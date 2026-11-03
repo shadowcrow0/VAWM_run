@@ -1,6 +1,6 @@
-Snapshot of two GitHub repositories (flat copies, no nested .git):
+Snapshot of the run files of two GitHub repositories (no nested .git):
 
-  Visual_AudioWM/  https://github.com/shadowcrow0/Visual_AudioWM  main   deb1928
-  adaptiveSFT/     https://github.com/shadowcrow0/adaptiveSFT     master 32281dd
+  Visual_AudioWM/  https://github.com/shadowcrow0/Visual_AudioWM  main   2e223f9   (run files only: SFT_WM_nochange_EN, sound_perception_EN, adaptive_vawm_EN, audio_pick, debug_adaptivesft_EN, generate_trials, setup_pymc_coder.bat, stimuli/)
+  adaptiveSFT/     https://github.com/shadowcrow0/adaptiveSFT     master 548b7be   (the adaptivesft package + pyproject)
 
-To refresh: pull both upstream repos and copy them over these folders (see README.md, "Updating this folder").
+To refresh: in a checkout of Visual_AudioWM run  python make_run_bundle.py --repo <this folder>  and update this file.

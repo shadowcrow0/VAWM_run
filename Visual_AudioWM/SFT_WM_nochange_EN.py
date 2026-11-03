@@ -33,18 +33,18 @@ QUICK = "--quick" in sys.argv
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
-LEVELS_COLOUR = [2.0, 6.0, 12.0, 20.0, 30.0, 45.0]
+LEVELS_COLOUR = [2.0, 6.0, 12.0, 25.0, 50.0, 90.0]
 LEVELS_AUDIO = [-2.6, -2.1, -1.6, -1.1, -0.7, -0.3]
-N_PER_LEVEL = 8
-P_MATCH = 1 / 3
-N_WARMUP = 8
-N_FILLER = 24
-H_TARG, L_TARG = 2.0, 0.5
+N_PER_LEVEL = 5
+P_MATCH = 1 / 4
+N_WARMUP = 10
+N_FILLER = 8
+H_TARG, L_TARG = 8.0, 1.3
 FIT_KW = dict(tune=1000, draws=1000, chains=4, nuts_sampler="nutpie")
 RT_MIN, RT_MAX = 0.15, 3.0
 N_BLOCKS = 6
-SETS_PER_BLOCK = 24
-PROBES_PER_SET = 9
+SETS_PER_BLOCK = 14
+PROBES_PER_SET = 16          # per set: AA x4, single distractor x2 each, double distractor x1 each (Houpt et al. 2014 Table 3, target collapsed to one level)
 N_PRACTICE_SETS = 2
 RESP_WINDOW = 3.0
 OTHER_TARGETS_CHANGE = False
@@ -128,17 +128,30 @@ if not ROBOT:
         present(None, 1.0, play=s1)
         present(None, 1.0, play=s2)
 
+    def resp_keys():
+        """The y / n keys pressed since probe onset, earliest first. PsychoPy 2026's getKeys(waitRelease=False) returns only keys still held down and waitRelease=True only released ones; a quick press is released before it is polled, so both are queried (2026-11-03: presses of n were logged as no response)."""
+        keys = kb.getKeys(["y", "n"], waitRelease=False) + kb.getKeys(["y", "n"], waitRelease=True)
+        return sorted(keys, key=lambda k: k.rt)
+
     def probe_trial(probe_col, probe_snd):
-        """Probe: fixation .3 → colour+sound 1 s → wait for y/n; returns (key, reaction time)."""
+        """Probe: fixation .3 → colour+sound 1 s → wait for y/n; returns (key, reaction time). Keys are collected from probe onset (RT counts from onset); the probe always stays 1 s, and only if nothing was pressed does the wait continue to RESP_WINDOW."""
         present(fix.draw, 0.3)
         patch_c.fillColor = probe_col
         kb.clearEvents()
         clock.reset()
-        present(patch_c.draw, 1.0, play=probe_snd)
-        keys = kb.getKeys(["y", "n"], waitRelease=False)
+        snd.setSound(probe_snd, secs=1, hamming=True)
+        snd.play()
+        keys = []
+        while clock.getTime() < 1.0:
+            patch_c.draw()
+            win.flip()
+            if kb.getKeys(["escape"]):
+                core.quit()
+            keys = keys or resp_keys()
+        snd.stop()
         while not keys and clock.getTime() < RESP_WINDOW:
             win.flip()
-            keys = kb.getKeys(["y", "n"], waitRelease=False)
+            keys = resp_keys()
             if kb.getKeys(["escape"]):
                 core.quit()
         return (keys[0].name, keys[0].rt) if keys else (None, None)
@@ -285,6 +298,8 @@ def calibrate(dim, log_rows):
          "Did this colour AND this sound both appear a moment ago?\n"
          "   Y = yes, both of them did.      N = no, at least one of them is different.\n\n"
          f"First, {N_WARMUP} practice trials with feedback. Then {n_total} trials without feedback.\n\n"
+         "Please press Y or N on EVERY trial, even when you are not sure. "
+         "A trial without a response cannot be used.\n\n"
          "Press the space bar to begin.")
     fixed = two_targets()
     fixed_cols = {}
@@ -391,11 +406,13 @@ COND = {
 }
 
 
-def nine_probes():
-    """The 9 probes of one set: 2 AA, 1 HA, 1 LA, 1 AH, 1 AL, 3 two-channel (HH/LH/HL/LL at random), shuffled."""
-    c = [int(rng.choice([0, 1])) for _ in range(2)]
-    c += [int(rng.choice([2, 3])), int(rng.choice([4, 5])), int(rng.choice([6, 7])), int(rng.choice([12, 13]))]
-    c += [int(rng.choice([8, 9, 10, 11, 14, 15, 16, 17])) for _ in range(3)]
+def set_probes():
+    """The 16 probes of one set: AA x4, HA / LA / AH / AL x2 each, HH / LH / HL / LL x1 each, each probing target 1 or 2 at random, shuffled.
+    = Table 3 of Houpt, Blaha, McIntire, Havig & Townsend (2014) (16 cells at 1/16) with the target collapsed to one level:
+    AxA 4/16, single distractor 2/16 each, double distractor 1/16 each (the AND column of the paper's Table 2).
+    SIC / MIC use the "n" RTs of the four double-distractor cells; a session of 6 blocks x 14 sets gives 84 per cell."""
+    plan = [(0, 1)] * 4 + [(2, 3), (4, 5), (6, 7), (12, 13)] * 2 + [(8, 9), (10, 11), (14, 15), (16, 17)]
+    c = [int(rng.choice(p)) for p in plan]
     rng.shuffle(c)
     return c
 
@@ -404,7 +421,7 @@ def run_sets(n_sets, block, calib, rows, with_feedback):
     for s in range(1, n_sets + 1):
         st = make_study_set(calib)
         study(st["color1_target"], st["color2_target"], st["audio1_target_file"], st["audio2_target_file"])
-        for p, cond in enumerate(nine_probes(), 1):
+        for p, cond in enumerate(set_probes(), 1):
             name, col_key, snd_key = COND[cond]
             probe_col, probe_snd = st[col_key], st[snd_key]
             key, rt = (probe_trial(probe_col, probe_snd, _info=("colour", 20.0 if name != "AA" else 0.0, name == "AA", "T"))
@@ -433,7 +450,7 @@ with open(f"data/{SUBJ}_simple_calib.json", "w", encoding="utf-8") as f:
 main_rows = []
 show("Part 3 of 3: the main task. First, a short practice.\n\n"
      "Each round starts the same way: two colours and two sounds to remember. "
-     "Then you will answer nine questions in a row, one colour-and-sound pair at a time.\n\n"
+     "Then you will answer sixteen questions in a row, one colour-and-sound pair at a time.\n\n"
      "Both the same as before: press Y.   Anything different: press N.\n\n"
      "Feedback is shown during practice only.\n\nPress the space bar to begin.")
 run_sets(N_PRACTICE_SETS, 0, calib, main_rows, with_feedback=True)

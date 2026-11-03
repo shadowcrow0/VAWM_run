@@ -2,5 +2,6 @@ __pycache__/
 *.pyc
 *.egg-info/
 Visual_AudioWM/audio_device.txt
-Visual_AudioWM/data/*_snr/
-Visual_AudioWM/data/*_snrpool/
+# participant data stay out of this public repository
+Visual_AudioWM/data/*
+!Visual_AudioWM/data/.keep
