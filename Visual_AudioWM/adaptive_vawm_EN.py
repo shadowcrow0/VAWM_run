@@ -227,6 +227,28 @@ def foil_for(confusion, cons, x):
     return cands[int(np.argmin(dist))]
 
 
+# Miller & Nicely (1955) articulatory features of the 16 consonants: voicing, nasality, affrication (frication),
+# duration, place (0 front, 1 middle, 2 back). The confusion COUNTS in generate_trials.py come from listening in
+# noise, where voicing survives, so voicing-only pairs (p-b, k-g) end up at the "least confusable" end of that axis;
+# in memory and for non-native listeners they are the hardest. Feature distance is the alternative sound axis.
+MN_FEATURES = {"p": (0, 0, 0, 0, 0), "t": (0, 0, 0, 0, 1), "k": (0, 0, 0, 0, 2), "f": (0, 0, 1, 0, 0),
+               "theta": (0, 0, 1, 0, 1), "s": (0, 0, 1, 1, 1), "sh": (0, 0, 1, 1, 2),
+               "b": (1, 0, 0, 0, 0), "d": (1, 0, 0, 0, 1), "g": (1, 0, 0, 0, 2), "v": (1, 0, 1, 0, 0),
+               "eth": (1, 0, 1, 0, 1), "z": (1, 0, 1, 1, 1), "zh": (1, 0, 1, 1, 2),
+               "m": (1, 1, 0, 0, 0), "n": (1, 1, 0, 0, 1)}
+
+
+def feature_distance(a, b):
+    """Number of Miller-Nicely features (0-5) on which consonants a and b differ."""
+    fa, fb = MN_FEATURES[a], MN_FEATURES[b]
+    return sum(int(x != y) for x, y in zip(fa, fb))
+
+
+def foils_at_distance(cons, d):
+    """All consonants that differ from cons on exactly d features."""
+    return [c for c in MN_FEATURES if c != cons and feature_distance(cons, c) == d]
+
+
 # ============================================================================================
 # ============================================================================================
 
