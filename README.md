@@ -11,6 +11,7 @@ VAWM_run\
    2_install_pymc.bat         install PyMC + nutpie into PsychoPy                        (once per PC, needs internet)
    3_check_everything.bat     one-click diagnostic of the whole chain                    (every new PC)
    4_sound_perception.bat     pure perception test of the consonants, ~6 min            (per participant, before the experiment)
+   4b_sound_perception_features.bat   same test, Miller-Nicely feature-distance axis (1..5) (per participant)
    5_run_experiment.bat       the real experiment                                        (per participant)
    5_run_experiment_robot.bat the same script with a simulated participant, no window    (optional self-test)
    Visual_AudioWM\            the scripts, the stimuli (wav), data\ output
@@ -63,6 +64,10 @@ Double-click **`4_sound_perception.bat`**. Two syllables, same talker, "same con
 trials, no memory load. At the end it prints and saves hit rate, d' and median RT per confusion level
 (`data\<id>_sound_perception.csv/.json`). This tells whether the participant can hear the consonant contrasts
 at all; the 2026-11-03 pilot found the sound dimension at chance inside the memory task but discriminable here.
+
+**`4b_sound_perception_features.bat`** runs the same test with a different axis: the number of Miller-Nicely
+articulatory features (1–5) on which the two consonants differ, over all 120 pairs. Run both; if d' at distance
+4–5 is clearly above the top level of step 4, the feature axis is the better sound dimension.
 
 ## Step 5 — run a participant
 
@@ -136,6 +141,10 @@ Step 4 — sound perception test (~6 min):
 
 ```powershell
 & "C:\Program Files\PsychoPy\python.exe" sound_perception_EN.py --require-headphones
+```
+
+```powershell
+& "C:\Program Files\PsychoPy\python.exe" sound_perception_EN.py --axis features --require-headphones
 ```
 
 Step 5 — the experiment (and the windowless self-test with a simulated participant):
