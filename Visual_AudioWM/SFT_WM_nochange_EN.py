@@ -34,7 +34,7 @@ QUICK = "--quick" in sys.argv
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
 LEVELS_COLOUR = [2.0, 6.0, 12.0, 25.0, 50.0, 90.0]
-LEVELS_AUDIO = [-2.6, -2.1, -1.6, -1.1, -0.7, -0.3]
+LEVELS_AUDIO = [0.4, 0.9, 1.5, 2.3, 3.3, 4.5]  # consonant dissimilarity in d' (Miller-Nicely / Luce via mdsdt; adaptive_vawm.load_dprime)
 N_PER_LEVEL = 5
 P_MATCH = 1 / 4
 N_WARMUP = 10
@@ -49,18 +49,18 @@ N_PRACTICE_SETS = 2
 RESP_WINDOW = 3.0
 OTHER_TARGETS_CHANGE = False
 PROV_DE_H, PROV_DE_L = 30.0, 6.0
-PROV_COUNT_H, PROV_COUNT_L = 10, 200
+PROV_DPRIME_H, PROV_DPRIME_L = 4.3, 1.0      # provisional sound H / L (d') used while the colour dimension is being calibrated
 if QUICK:
     FIT_KW = dict(tune=300, draws=300, chains=2, nuts_sampler="nutpie")
     N_BLOCKS, SETS_PER_BLOCK, N_PRACTICE_SETS = 1, 3, 1
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
-from adaptive_vawm_EN import (TALKERS, audio_x, count_from_x, delta_e, find_colour_at, foil_for,  # noqa: E402
-                           from_model_units, lab_to_hex, load_confusion, load_full_package, random_target,
+from adaptive_vawm_EN import (TALKERS, audio_x, delta_e, find_colour_at, foil_for,  # noqa: E402
+                           from_model_units, lab_to_hex, load_dprime, load_full_package, random_target,
                            sound_file, to_model_units)
-CONFUSION = load_confusion()
-CONSONANTS = sorted(CONFUSION)
+DPRIME = load_dprime()
+CONSONANTS = sorted(DPRIME)
 rng = np.random.default_rng()
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -217,10 +217,9 @@ def write_csv(path, rows):
         w.writerows(rows)
 
 
-def foil_near(cons, count):
-    """Among the foil consonants of the target, the one whose confusion count is closest to count."""
-    cands = CONFUSION[cons]
-    return cands[int(np.argmin([abs(np.log10(c + 1) - np.log10(count + 1)) for _, c in cands]))][0]
+def foil_near(cons, dprime):
+    """Among the foil consonants of the target, the one whose d' is closest to dprime."""
+    return foil_for(DPRIME, cons, dprime)[0]
 
 
 def two_targets():
@@ -258,13 +257,13 @@ def run_calib_trial(dim, x, other, fixed, fixed_cols):
         if other == "T":
             probe_snd = sound_file(talker, target_snd)
         else:
-            probe_snd = sound_file(talker, foil_near(target_snd, PROV_COUNT_H if other == "H" else PROV_COUNT_L))
+            probe_snd = sound_file(talker, foil_near(target_snd, PROV_DPRIME_H if other == "H" else PROV_DPRIME_L))
     else:
         if is_match:
-            foil, count = target_snd, 0
+            foil, dprime = target_snd, 0.0
         else:
-            foil, count = foil_for(CONFUSION, target_snd, x)
-        x_actual = audio_x(count)
+            foil, dprime = foil_for(DPRIME, target_snd, x)
+        x_actual = audio_x(dprime)
         probe_snd = sound_file(talker, foil)
         if other == "T":
             probe_col = lab_to_hex(target_col)
@@ -359,8 +358,8 @@ def calibrate(dim, log_rows):
                n_used=len(use), fit_seconds=round(time.time() - t0), warnings=list(res["warnings"]),
                extra=dict(method="lnrm_quadratic"))
     if dim == "audio":
-        out["extra"]["count_high"] = float(count_from_x(high))
-        out["extra"]["count_low"] = float(count_from_x(low))
+        out["extra"]["dprime_high"] = float(high)
+        out["extra"]["dprime_low"] = float(low)
     print(f"[{dim}] H={out['high']:.2f} L={out['low']:.2f} in_range={in_range} FA={out['false_alarm']} "
           f"fit {out['fit_seconds']}s {out['warnings']}")
     if not ROBOT and not in_range:
@@ -372,7 +371,7 @@ def calibrate(dim, log_rows):
 # ════════════════════════════════════════════════════════════════════════════════
 def make_study_set(calib):
     de_h, de_l = calib["colour"]["high"], calib["colour"]["low"]
-    cnt_h, cnt_l = calib["audio"]["extra"]["count_high"], calib["audio"]["extra"]["count_low"]
+    dp_h, dp_l = calib["audio"]["extra"]["dprime_high"], calib["audio"]["extra"]["dprime_low"]
     for _ in range(200):
         t1, t2, s1, s2, k1, k2 = two_targets()
         cols = [find_colour_at(t, de, rng) for t in (t1, t2) for de in (de_h, de_l)]
@@ -385,10 +384,10 @@ def make_study_set(calib):
     return dict(
         color1_target=lab_to_hex(t1), color1_H=lab_to_hex(h1), color1_L=lab_to_hex(l1),
         color2_target=lab_to_hex(t2), color2_H=lab_to_hex(h2), color2_L=lab_to_hex(l2),
-        audio1_target_file=sound_file(k1, s1), audio1_H_file=sound_file(k1, foil_near(s1, cnt_h)),
-        audio1_L_file=sound_file(k1, foil_near(s1, cnt_l)),
-        audio2_target_file=sound_file(k2, s2), audio2_H_file=sound_file(k2, foil_near(s2, cnt_h)),
-        audio2_L_file=sound_file(k2, foil_near(s2, cnt_l)),
+        audio1_target_file=sound_file(k1, s1), audio1_H_file=sound_file(k1, foil_near(s1, dp_h)),
+        audio1_L_file=sound_file(k1, foil_near(s1, dp_l)),
+        audio2_target_file=sound_file(k2, s2), audio2_H_file=sound_file(k2, foil_near(s2, dp_h)),
+        audio2_L_file=sound_file(k2, foil_near(s2, dp_l)),
     )
 
 # ════════════════════════════════════════════════════════════════════════════════

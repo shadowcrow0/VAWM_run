@@ -1,7 +1,6 @@
 """
 Adaptive calibration for VAWM_nobox.py: each participant first calibrates the colour distance (block 1) and the consonant confusability (block 2) with LNRMCalibrator (original adaptiveSFT, needs PyMC) or PsiCalibrator (numpy + scipy), and the calibrated H / L then produce stimuli/block1..6.csv; this file does not touch PsychoPy (the screen is in VAWM_calibrate.py).
 """
-import ast
 import csv
 import importlib
 import importlib.util
@@ -99,19 +98,19 @@ salience_levels = psi_module.salience_levels
 CSV_COLUMNS = ["trial",
                "color1_target", "color1_H", "color1_L", "color1_H_deltaE", "color1_L_deltaE", "color1_HL_deltaE",
                "color2_target", "color2_H", "color2_L", "color2_H_deltaE", "color2_L_deltaE", "color2_HL_deltaE",
-               "audio1_target", "audio1_H", "audio1_L", "audio1_H_count", "audio1_L_count",
+               "audio1_target", "audio1_H", "audio1_L", "audio1_H_dprime", "audio1_L_dprime",
                "audio1_target_talker", "audio1_H_talker", "audio1_L_talker",
                "audio1_target_file", "audio1_H_file", "audio1_L_file",
-               "audio2_target", "audio2_H", "audio2_L", "audio2_H_count", "audio2_L_count",
+               "audio2_target", "audio2_H", "audio2_L", "audio2_H_dprime", "audio2_L_dprime",
                "audio2_target_talker", "audio2_H_talker", "audio2_L_talker",
                "audio2_target_file", "audio2_H_file", "audio2_L_file"]
 TALKERS = ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11", "T12"]
 
 LEVELS_COLOUR = [2.0, 6.0, 12.0, 25.0, 50.0, 90.0]
-LEVELS_AUDIO = [-2.6, -2.1, -1.6, -1.1, -0.7, -0.3]
+LEVELS_AUDIO = [0.4, 0.9, 1.5, 2.3, 3.3, 4.5]     # d' (Miller-Nicely / Luce, see load_dprime); snapped per trial to the target consonant's available foils
 H_TARG_DEFAULT = 8.0
 L_TARG_DEFAULT = 1.3
-AUDIO_SHIFT = 2.7
+AUDIO_SHIFT = 0.0                                        # d' is already >= 0; no shift into model units
 
 
 # ============================================================================================
@@ -196,41 +195,44 @@ def find_colour_at(target, de, rng, tol=0.5, max_tries=2000):
 # ============================================================================================
 # ============================================================================================
 
-def load_confusion(path=None):
-    """Read CONFUSION_DATA from generate_trials.py (without importing it, since it imports pandas). Returns {consonant: [(foil, count), …]}."""
-    path = path or os.path.join(HERE, "generate_trials.py")
-    src = open(path, encoding="utf-8").read()
-    m = re.search(r"CONFUSION_DATA\s*=\s*(\[.*?\n\])", src, re.S)
+DPRIME_CSV = os.path.join(HERE, "stimuli", "consonant_dprime.csv")
+
+
+def load_dprime(path=None):
+    """Sound axis table {target: [(foil, d'), ...]} for the 16 consonants (15 foils each), read from stimuli/consonant_dprime.csv
+    (written by make_sound_pairs.py). d' = 0.911 x Luce distance from Miller & Nicely (1955) at -12/-6/0 dB; the factor maps the
+    Luce scale onto the mdsdt GRT fits at -6 dB (Pearson .98 on 28 single-feature pairs, review/GRT擬合MN_B路線_D2.md §8).
+    Larger = easier to tell apart. Replaces the old -log10(confusion count + 1) axis (DECISIONS.md 21)."""
+    path = path or DPRIME_CSV
     table = {}
-    for row in ast.literal_eval(m.group(1)):
-        table.setdefault(row["sound"], []).append((row["target"], int(row["count"])))
+    with open(path, encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            table.setdefault(r["target"], []).append((r["foil"], float(r["dprime"])))
+    if len(table) != 16:
+        raise ValueError("{}: expected 16 target consonants, found {}".format(path, len(table)))
     return table
 
 
-def audio_x(count):
-    """Confusion count → dissimilarity axis. count 1 → −0.3; count 451 → −2.66. Larger = easier to discriminate."""
-    return -np.log10(float(count) + 1.0)
-
-
-def count_from_x(x):
-    return 10.0 ** (-float(x)) - 1.0
+def audio_x(dprime):
+    """The sound axis IS d'; kept so the two dimensions can be handled alike (colour: delta_e, sound: audio_x)."""
+    return float(dprime)
 
 
 def sound_file(talker, cons):
     return "stimuli/{}_{}3.wav".format(talker, cons)
 
 
-def foil_for(confusion, cons, x):
-    """Among the foils of target consonant cons, the one whose dissimilarity is closest to x. Returns (foil, count)."""
-    cands = confusion[cons]
-    dist = [abs(audio_x(count) - x) for _, count in cands]
+def foil_for(table, cons, x):
+    """Among the 15 foils of target consonant cons, the one whose d' is closest to x. Returns (foil, dprime)."""
+    cands = table[cons]
+    dist = [abs(d - x) for _, d in cands]
     return cands[int(np.argmin(dist))]
 
 
 # Miller & Nicely (1955) articulatory features of the 16 consonants: voicing, nasality, affrication (frication),
-# duration, place (0 front, 1 middle, 2 back). The confusion COUNTS in generate_trials.py come from listening in
-# noise, where voicing survives, so voicing-only pairs (p-b, k-g) end up at the "least confusable" end of that axis;
-# in memory and for non-native listeners they are the hardest. Feature distance is the alternative sound axis.
+# duration, place (0 front, 1 middle, 2 back). Feature distance (number of differing features) was a candidate
+# sound axis (DECISIONS.md 19); it lost to d' because the same one-feature difference spans d' 0.4 (p-t) to 2.5 (b-d)
+# (review/GRT擬合MN_B路線_D2.md). Kept for the sound_perception_EN.py 'features' axis and for labelling pairs.
 MN_FEATURES = {"p": (0, 0, 0, 0, 0), "t": (0, 0, 0, 0, 1), "k": (0, 0, 0, 0, 2), "f": (0, 0, 1, 0, 0),
                "theta": (0, 0, 1, 0, 1), "s": (0, 0, 1, 1, 1), "sh": (0, 0, 1, 1, 2),
                "b": (1, 0, 0, 0, 0), "d": (1, 0, 0, 0, 1), "g": (1, 0, 0, 0, 2), "v": (1, 0, 1, 0, 0),
@@ -275,9 +277,9 @@ def make_colour_trial(rng, x, is_match, sounds):
                 probe_of=which + 1, is_match=is_match, x=delta_e(target, probe))
 
 
-def make_audio_trial(rng, x, is_match, confusion):
+def make_audio_trial(rng, x, is_match, table):
     """One block-2 trial: two target colours and two target sounds; the probe is one target's colour with its foil consonant (same talker), the foil snapped from x to that consonant's available foils; the returned x is the snapped value."""
-    sounds = sorted(confusion)
+    sounds = sorted(table)
     t1 = random_target(rng)
     t2 = random_target(rng, avoid=[t1])
     s1, s2 = rng.choice(sounds, 2, replace=False)
@@ -286,20 +288,20 @@ def make_audio_trial(rng, x, is_match, confusion):
     target_sound = [s1, s2][which]
     talker = [k1, k2][which]
     if is_match:
-        foil, count, x_actual = target_sound, 0, 0.0
+        foil, dprime, x_actual = target_sound, 0.0, 0.0
     else:
-        foil, count = foil_for(confusion, target_sound, x)
-        x_actual = audio_x(count)
+        foil, dprime = foil_for(table, target_sound, x)
+        x_actual = audio_x(dprime)
     return dict(color1_target=lab_to_hex(t1), color2_target=lab_to_hex(t2),
                 audio1_target_file=sound_file(k1, s1), audio2_target_file=sound_file(k2, s2),
                 probe_colour=lab_to_hex([t1, t2][which]), probe_sound=sound_file(talker, foil),
-                probe_of=which + 1, is_match=is_match, foil=foil, count=count, x=x_actual)
+                probe_of=which + 1, is_match=is_match, foil=foil, dprime=dprime, x=x_actual)
 
 
-def make_trial(dim, rng, x, is_match, confusion):
+def make_trial(dim, rng, x, is_match, table):
     if dim == "colour":
-        return make_colour_trial(rng, x, is_match, sorted(confusion))
-    return make_audio_trial(rng, x, is_match, confusion)
+        return make_colour_trial(rng, x, is_match, sorted(table))
+    return make_audio_trial(rng, x, is_match, table)
 
 
 def score(trial, key):
@@ -347,8 +349,8 @@ def make_result(dim, log, fa, alpha, beta, high, low, target_high, target_low, x
                   alpha=alpha, beta=beta, high=high, low=low, p_high=target_high, p_low=target_low,
                   x_range=list(x_range), in_range=in_range, warnings=warnings, extra=dict(extra))
     if dim == "audio":
-        result["extra"]["count_high"] = count_from_x(high)
-        result["extra"]["count_low"] = count_from_x(low)
+        result["extra"]["dprime_high"] = float(high)
+        result["extra"]["dprime_low"] = float(low)
     return result
 
 
@@ -368,18 +370,18 @@ class PsiCalibrator:
     """
 
     def __init__(self, dim, p_high=0.90, p_low=0.75, p_match=1 / 3, floor_guess=0.10, lapse=0.02, seed=None,
-                 x=None, a=None, b=None, confusion=None):
+                 x=None, a=None, b=None, table=None):
         if dim == "colour":
             grids = dict(x=(2.0, 50.0, 1.0), a=(0.0, 45.0, 1.0), b=(1.0, 25.0, 1.0))
         elif dim == "audio":
-            grids = dict(x=(-2.7, 0.0, 0.05), a=(-2.7, 0.0, 0.05), b=(0.05, 2.0, 0.05))
+            grids = dict(x=(0.2, 5.0, 0.1), a=(0.2, 5.0, 0.1), b=(0.1, 2.5, 0.1))
         else:
             raise ValueError("dim must be 'colour' or 'audio'")
         self.dim = dim
         self.psi = Psi(x or grids["x"], a or grids["a"], b or grids["b"], d=lapse, lower=floor_guess, upper=lapse / 2)
         self.p_high, self.p_low, self.p_match = p_high, p_low, p_match
         self.floor_guess = floor_guess
-        self.confusion = confusion or load_confusion()
+        self.table = table or load_dprime()
         self.rng = np.random.default_rng(seed)
         self.log = []
         self.current = None
@@ -387,7 +389,7 @@ class PsiCalibrator:
     def next_trial(self):
         is_match = self.rng.uniform() < self.p_match
         x = float(self.psi.next_intensity)
-        trial = make_trial(self.dim, self.rng, x, is_match, self.confusion)
+        trial = make_trial(self.dim, self.rng, x, is_match, self.table)
         trial["trial_no"] = len(self.log) + 1
         trial["x_psi"] = x
         trial["x_index"] = self.psi.nearest_index(trial["x"])
@@ -430,7 +432,7 @@ class LNRMCalibrator:
 
     def __init__(self, dim, levels=None, n_per_level=5, p_match=1 / 4, h_targ=H_TARG_DEFAULT, l_targ=L_TARG_DEFAULT,
                  link="quadratic", seed=None, rt_min=0.15, rt_max=3.0, floor_guess=0.10, alpha2_rule="filter",
-                 confusion=None, **fit_kwargs):
+                 table=None, **fit_kwargs):
         if dim not in ("colour", "audio"):
             raise ValueError("dim must be 'colour' or 'audio'")
         if levels is None:
@@ -443,7 +445,7 @@ class LNRMCalibrator:
         self.floor_guess = floor_guess
         self.alpha2_rule = alpha2_rule
         self.fit_kwargs = fit_kwargs
-        self.confusion = confusion or load_confusion()
+        self.table = table or load_dprime()
         self.rng = np.random.default_rng(seed)
         self.log = []
         self.current = None
@@ -462,7 +464,7 @@ class LNRMCalibrator:
             raise StopIteration
         x = self.plan[len(self.log)]
         is_match = x is None
-        trial = make_trial(self.dim, self.rng, 0.0 if is_match else x, is_match, self.confusion)
+        trial = make_trial(self.dim, self.rng, 0.0 if is_match else x, is_match, self.table)
         trial["trial_no"] = len(self.log) + 1
         trial["x_planned"] = x
         self.current = trial
@@ -536,11 +538,9 @@ def read_calibration(path):
         return json.load(f)
 
 
-def foil_near_count(confusion, cons, count):
-    """Among the foils of target consonant cons, the one whose confusion count (log scale) is closest to count."""
-    cands = confusion[cons]
-    dist = [abs(np.log10(c + 1) - np.log10(count + 1)) for _, c in cands]
-    return cands[int(np.argmin(dist))]
+def foil_near_dprime(table, cons, dprime):
+    """Among the foils of target consonant cons, the one whose d' is closest to dprime. Returns (foil, dprime)."""
+    return foil_for(table, cons, dprime)
 
 
 def pick_two_targets_with_foils(rng, de_h, de_l, prev, min_target_sep, min_hl_sep):
@@ -563,12 +563,12 @@ def pick_two_targets_with_foils(rng, de_h, de_l, prev, min_target_sep, min_hl_se
 def write_blocks(calib, out_dir, n_blocks=6, trials_per_block=24, seed=None, min_target_sep=20.0, min_hl_sep=0.0):
     """Generate stimuli/block1..6.csv (columns = CSV_COLUMNS) from a calibration result (the dict read back by read_calibration)."""
     rng = np.random.default_rng(seed)
-    confusion = load_confusion()
-    sounds = sorted(confusion)
+    table = load_dprime()
+    sounds = sorted(table)
     de_h = float(calib["colour"]["high"])
     de_l = float(calib["colour"]["low"])
-    count_h = float(calib["audio"]["extra"]["count_high"])
-    count_l = float(calib["audio"]["extra"]["count_low"])
+    dp_h = float(calib["audio"]["extra"]["dprime_high"])
+    dp_l = float(calib["audio"]["extra"]["dprime_low"])
 
     os.makedirs(out_dir, exist_ok=True)
     paths = []
@@ -580,10 +580,10 @@ def write_blocks(calib, out_dir, n_blocks=6, trials_per_block=24, seed=None, min
             prev = [t1, t2]
             s1, s2 = rng.choice(sounds, 2, replace=False)
             k1, k2 = rng.choice(TALKERS, 2)
-            h1s, h1c = foil_near_count(confusion, s1, count_h)
-            l1s, l1c = foil_near_count(confusion, s1, count_l)
-            h2s, h2c = foil_near_count(confusion, s2, count_h)
-            l2s, l2c = foil_near_count(confusion, s2, count_l)
+            h1s, h1c = foil_near_dprime(table, s1, dp_h)
+            l1s, l1c = foil_near_dprime(table, s1, dp_l)
+            h2s, h2c = foil_near_dprime(table, s2, dp_h)
+            l2s, l2c = foil_near_dprime(table, s2, dp_l)
             rows.append(dict(
                 trial=t,
                 color1_target=lab_to_hex(t1), color1_H=lab_to_hex(h1), color1_L=lab_to_hex(l1),
@@ -592,10 +592,10 @@ def write_blocks(calib, out_dir, n_blocks=6, trials_per_block=24, seed=None, min
                 color2_target=lab_to_hex(t2), color2_H=lab_to_hex(h2), color2_L=lab_to_hex(l2),
                 color2_H_deltaE=round(delta_e(t2, h2), 2), color2_L_deltaE=round(delta_e(t2, l2), 2),
                 color2_HL_deltaE=round(delta_e(h2, l2), 2),
-                audio1_target=s1, audio1_H=h1s, audio1_L=l1s, audio1_H_count=h1c, audio1_L_count=l1c,
+                audio1_target=s1, audio1_H=h1s, audio1_L=l1s, audio1_H_dprime=round(h1c, 2), audio1_L_dprime=round(l1c, 2),
                 audio1_target_talker=k1, audio1_H_talker=k1, audio1_L_talker=k1,
                 audio1_target_file=sound_file(k1, s1), audio1_H_file=sound_file(k1, h1s), audio1_L_file=sound_file(k1, l1s),
-                audio2_target=s2, audio2_H=h2s, audio2_L=l2s, audio2_H_count=h2c, audio2_L_count=l2c,
+                audio2_target=s2, audio2_H=h2s, audio2_L=l2s, audio2_H_dprime=round(h2c, 2), audio2_L_dprime=round(l2c, 2),
                 audio2_target_talker=k2, audio2_H_talker=k2, audio2_L_talker=k2,
                 audio2_target_file=sound_file(k2, s2), audio2_H_file=sound_file(k2, h2s), audio2_L_file=sound_file(k2, l2s),
             ))

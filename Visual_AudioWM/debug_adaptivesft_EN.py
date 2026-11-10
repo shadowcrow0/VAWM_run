@@ -136,10 +136,10 @@ if not hasattr(A, "PsiCalibrator"):
 for name in ("next_intensity", "update_at", "nearest_index", "estimate"):
     (ok if hasattr(A.Psi, name) or name == "next_intensity" else bad)(f"Psi.{name}")
 try:
-    conf = A.load_confusion()
-    ok(f"confusion table: {len(conf)} consonants (from generate_trials.py)")
+    conf = A.load_dprime()
+    ok(f"d' table: {len(conf)} consonants (stimuli/consonant_dprime.csv)")
 except Exception as e:
-    bad(f"load_confusion failed: {e}")
+    bad(f"load_dprime failed: {e} — stimuli/consonant_dprime.csv missing? re-download main or run make_sound_pairs.py")
     raise SystemExit
 
 hdr(3, "METHOD capability check")

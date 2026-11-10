@@ -3,7 +3,7 @@ sound_perception_EN.py: a pure perception test of the consonant stimuli, no memo
 
     Each trial: syllable 1 (0.6 s)  ->  0.5 s silence  ->  syllable 2 (0.6 s)  ->  "same consonant?"  y / n
     Same talker on both syllables; "same" plays the identical file. Feedback after every trial.
-    "Different" pairs are chosen exactly as in the experiment (foil_for on the Miller-Nicely confusion counts)
+    "Different" pairs are chosen exactly as in the experiment (foil_for on the Miller-Nicely d' table)
     at the six levels of LEVELS_AUDIO, N_PER_LEVEL each, plus 1/3 "same" trials.
 
 Why: in the 2026-11-03 pilot the sound dimension sat at chance inside the working-memory task even for the most
@@ -12,7 +12,7 @@ if the most dissimilar level reaches ~90 % here, the problem is the memory load;
 
     python sound_perception_EN.py                 DEFAULT: the fixed table stimuli/sound_pairs.csv (80 pairs, 5 Luce levels,
                                                   every consonant once per level, fixed talkers) + 40 same trials, ~7 minutes
-    python sound_perception_EN.py --axis counts    old confusion-count axis, foils drawn at random (as in the 11-03 pilot)
+    python sound_perception_EN.py --axis dprime    the experiment's d' axis (LEVELS_AUDIO), foil = nearest d' to each level
     python sound_perception_EN.py --axis features  Miller-Nicely feature distance 1..5, foils drawn at random
     python sound_perception_EN.py --robot         simulated listener, no window (tests the flow)
     python sound_perception_EN.py --audio-device "Headphones"      (or audio_pick.py --set, see README_RUN.md)
@@ -38,20 +38,20 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 ROBOT = "--robot" in sys.argv
 
 from adaptive_vawm_EN import (LEVELS_AUDIO, TALKERS, audio_x, feature_distance, foil_for,  # noqa: E402
-                              foils_at_distance, load_confusion, sound_file)
+                              foils_at_distance, load_dprime, sound_file)
 
-AXIS = sys.argv[sys.argv.index("--axis") + 1] if "--axis" in sys.argv else "pairs"      # pairs | counts | features
+AXIS = sys.argv[sys.argv.index("--axis") + 1] if "--axis" in sys.argv else "pairs"      # pairs | dprime | features
 PAIRS_CSV = "stimuli/sound_pairs.csv"
 
-N_PER_LEVEL = 12 if AXIS == "counts" else 14      # counts: 6 levels x 12 = 72; features: 5 levels x 14 = 70; pairs: the table
+N_PER_LEVEL = 12 if AXIS == "dprime" else 14      # dprime: 6 levels x 12 = 72; features: 5 levels x 14 = 70; pairs: the table
 P_SAME = 1 / 3            # plus 1/3 "same" trials -> 108 / 105 / 120 in all
-LEVELS = LEVELS_AUDIO if AXIS == "counts" else [1, 2, 3, 4, 5]     # features: differing features; pairs: Luce level 1..5
+LEVELS = LEVELS_AUDIO if AXIS == "dprime" else [1, 2, 3, 4, 5]     # features: differing features; pairs: Luce level 1..5
 ISI = 0.5                 # silence between the two syllables
 RESP_WINDOW = 3.0         # seconds to answer after the second syllable ends
 FEEDBACK = 0.6
 
-CONFUSION = load_confusion()
-CONSONANTS = sorted(CONFUSION)
+DPRIME = load_dprime()
+CONSONANTS = sorted(DPRIME)
 rng = np.random.default_rng()
 
 
@@ -84,8 +84,8 @@ def make_plan():
         talker = TALKERS[int(rng.integers(len(TALKERS)))]
         if same:
             foil, count, x_actual = cons, None, None
-        elif AXIS == "counts":
-            foil, count = foil_for(CONFUSION, cons, x)
+        elif AXIS == "dprime":
+            foil, count = foil_for(DPRIME, cons, x)
             x_actual = audio_x(count)
         else:
             cands = foils_at_distance(cons, x)
@@ -174,7 +174,7 @@ else:
         # simulated listener: P(say "different") rises with dissimilarity; 10 % false alarms on same trials
         if t["is_same"]:
             return ("n" if rng.uniform() < 0.10 else "y"), 0.6 + rng.exponential(0.2)
-        p_diff = (1 / (1 + math.exp(-3.0 * (t["x"] + 1.4))) if AXIS == "counts"
+        p_diff = (1 / (1 + math.exp(-2.0 * (t["x"] - 1.2))) if AXIS == "dprime"
                   else 1 / (1 + math.exp(-1.5 * (t["x_planned"] - 2.5))))
         return ("n" if rng.uniform() < p_diff else "y"), 0.6 + rng.exponential(0.3)
 
@@ -198,7 +198,7 @@ for i, t in enumerate(trials, 1):
     rows.append(dict(participant=SUBJ, trial=i, **t, key=key, rt=rt, correct=correct))
 
 os.makedirs("data", exist_ok=True)
-path = f"data/{SUBJ}_sound_perception{'' if AXIS == 'counts' else '_' + AXIS}.csv"
+path = f"data/{SUBJ}_sound_perception{'' if AXIS == 'pairs' else '_' + AXIS}.csv"
 with open(path, "w", newline="", encoding="utf-8") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0]))
     w.writeheader()
@@ -220,7 +220,7 @@ fa = sum(1 for r in same if r["key"] == "n") / max(len(same), 1)
 summary = dict(participant=SUBJ, axis=AXIS, n_trials=len(rows), n_no_response=sum(1 for r in rows if r["key"] is None),
                same_trials=len(same), false_alarm=fa, levels={})
 print(f"\n{SUBJ}: {len(rows)} trials, no response {summary['n_no_response']}, false alarm (same trials) {fa:.2f}")
-print(f"  axis = {AXIS} (" + {"counts": "confusion counts, -log10(count+1)", "features": "number of differing Miller-Nicely features",
+print(f"  axis = {AXIS} (" + {"dprime": "d' axis LEVELS_AUDIO (Miller-Nicely / Luce via mdsdt)", "features": "number of differing Miller-Nicely features",
                             "pairs": "fixed table stimuli/sound_pairs.csv, Luce distance levels 1..5"}[AXIS] + ")")
 print(f"  {'level x':>8} {'n':>3} {'hit':>5} {'d-prime':>8} {'median RT':>10}")
 for x in LEVELS:
