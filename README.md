@@ -60,8 +60,9 @@ OK; a FAIL line prints what to do next.
 
 ## Step 4 — sound perception test (per participant, ~6 min)
 
-Double-click **`4_sound_perception.bat`**. Two syllables, same talker, "same consonant? y / n", feedback, 108
-trials, no memory load. At the end it prints and saves hit rate, d' and median RT per confusion level
+Double-click **`4_sound_perception.bat`**. Two syllables, same talker, "same consonant? y / n", feedback, 120
+trials (a FIXED table of 80 consonant pairs, `Visual_AudioWM\stimuli\sound_pairs.csv`: 5 dissimilarity levels x 16
+target consonants, fixed talkers, plus 40 same trials; only the order is shuffled), no memory load. At the end it prints and saves hit rate, d' and median RT per confusion level
 (`data\<id>_sound_perception.csv/.json`). This tells whether the participant can hear the consonant contrasts
 at all; the 2026-11-03 pilot found the sound dimension at chance inside the memory task but discriminable here.
 
