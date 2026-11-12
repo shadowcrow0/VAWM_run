@@ -90,12 +90,16 @@ python audio_pick.py --set "USB Audio"      # pin a device by (part of) its name
 ```
 
 On Linux the device names come from PortAudio: with PipeWire/PulseAudio you usually see one device called
-`pulse` or `default` plus the raw ALSA cards (`hw:0,0 …`). If only `pulse`/`default` shows up, select the
-headphones in the desktop sound settings and pin `pulse`; the scripts cannot tell it is headphones, so start the
-experiment with `--no-headphone-check`? — **no**: `SFT_WM_nochange_EN.py` has no such flag; instead pass
-`--audio-device pulse` and accept the `[audio]` warning line, or use the raw ALSA name of the headphone card
-(`python audio_pick.py` lists it) so the headphone check can pass. Whatever you choose, the device name is written
-into every data row (`audio_device`), so the choice is auditable afterwards.
+`pulse` or `default` plus the raw ALSA cards (`hw:0,0 …`). The headphone check (`--require-headphones`) only looks
+at the device *name*, so:
+
+- if a card is listed under a headphone-like name (`… Headphones`, `USB Audio`, the headset's brand), pin it with
+  `--set` and keep `--require-headphones` when you run;
+- if only `pulse` / `default` shows up, select the headphones in the desktop sound settings, pin `pulse`, and run
+  the scripts **without** `--require-headphones` (the flag is an option, not a default; the Windows `.bat` files add
+  it). Confirm the tone from `python audio_pick.py` comes out of the headphones.
+
+Whatever you choose, the device name is written into every data row (`audio_device`), so the choice is auditable.
 
 Set the system volume once with a reference tone and do not touch it afterwards; the SNR mixing in `snr_audio`
 assumes a fixed playback level.
@@ -117,6 +121,7 @@ device. A `FAIL` line prints the fix.
 cd Visual_AudioWM
 python sound_perception_EN.py --require-headphones        # ~8 min, pure perception, fixed 80-pair table
 python SFT_WM_nochange_EN.py --require-headphones          # the experiment: 2 calibrations → practice → 6 blocks
+                                                           # drop --require-headphones if the device is only 'pulse' (see §3)
 python SFT_WM_nochange_EN.py --robot --quick               # self-test with a simulated participant, no window
 ```
 
