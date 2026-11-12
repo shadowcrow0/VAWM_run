@@ -15,11 +15,6 @@ Mac by the author** — the development container has no display or sound card. 
 
 ## 1. Install (once per Mac, ~15 min, needs internet)
 
-Two routes. **A** (a plain Python venv) is the one to use from the terminal; **B** reuses the standalone PsychoPy.app
-if it is already installed.
-
-### A. venv
-
 ```bash
 # Python 3.11 (Apple Silicon or Intel both fine)
 brew install python@3.11 portaudio
@@ -38,18 +33,6 @@ python -c "import psychopy, pymc, nutpie, adaptivesft; print('OK', psychopy.__ve
 If `pip install psychtoolbox` fails on Apple Silicon (no wheel for your Python), the scripts still run: PsychoPy falls
 back from the `ptb` audio backend to `sounddevice` with a warning, at the cost of ~5–10 ms audio-onset jitter. Note
 it in the lab log; the calibrations do not depend on audio-onset precision, the RT measures do only weakly.
-
-### B. standalone PsychoPy.app
-
-```bash
-PY="/Applications/PsychoPy.app/Contents/MacOS/python"
-export PYTHONUSERBASE="$HOME/.psychopy3/packages"        # the folder PsychoPy's Coder adds to sys.path
-"$PY" -m pip install --user pymc numba arviz nutpie
-"$PY" -m pip install --user --no-deps -e ./adaptiveSFT
-"$PY" -c "import pymc, nutpie, adaptivesft; print('OK')"
-```
-
-Use `"$PY"` wherever the commands below say `python`, and keep `PYTHONUSERBASE` exported in that shell.
 
 ## 2. macOS permissions (once per Mac)
 
