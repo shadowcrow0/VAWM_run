@@ -1,5 +1,7 @@
 # VAWM_run — everything needed to run the experiment, in one folder
 
+Linux: see `RUN_ON_LINUX.md`.
+
 Copy this whole folder to the experiment PC (USB stick, OneDrive, anything). Nothing in it depends on where it
 sits, except that **PsychoPy must be installed** at `C:\Program Files\PsychoPy` (standalone PsychoPy, Python
 3.10). Edit the path at the top of the `.bat` files if PsychoPy lives somewhere else.
