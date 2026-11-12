@@ -1,6 +1,6 @@
 # VAWM_run — everything needed to run the experiment, in one folder
 
-Linux: see `RUN_ON_LINUX.md`.
+Linux: see `RUN_ON_LINUX.md` (SFT) and `Visual_AudioWM/RUN_GRTv3_ON_LINUX.md` (GRT). Mac, terminal: `RUN_ON_MAC.md` (both).
 
 Copy this whole folder to the experiment PC (USB stick, OneDrive, anything). Nothing in it depends on where it
 sits, except that **PsychoPy must be installed** at `C:\Program Files\PsychoPy` (standalone PsychoPy, Python
