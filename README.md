@@ -16,6 +16,8 @@ VAWM_run\
    4b_sound_perception_features.bat   same test, Miller-Nicely feature-distance axis (1..5) (per participant)
    5_run_experiment.bat       the real experiment                                        (per participant)
    5_run_experiment_robot.bat the same script with a simulated participant, no window    (optional self-test)
+   6_run_grt.bat              the GRT experiment (GRTv3_ada_EN.py), headphones required   (per participant; no PyMC needed)
+   6b_check_grt_audio.bat     self-check of the GRT sound mixing (snr_runtime.py)        (every new PC)
    Visual_AudioWM\            the scripts, the stimuli (wav), data\ output
    adaptiveSFT\               the model-fitting package the calibration uses
 ```
@@ -182,3 +184,18 @@ This repository is a snapshot of the run files of two upstream repositories (com
 Visual_AudioWM run `python make_run_bundle.py --repo <path to this folder>`, update `SOURCES.txt`, commit, push.
 The `.bat` files and this README live only here. Design decisions and notes stay in the upstream repositories
 (`Visual_AudioWM/DECISIONS.md`, `Visual_AudioWM/review/`).
+
+## Step 6 — the GRT experiment (GRTv3_ada_EN.py)
+
+The second experiment in the same folder: four colour+sound items per trial, a cue, a four-corner choice (`i o k l`).
+Both dimensions are calibrated with two Psi staircases (`AGRT.py`), so **PyMC is not needed** — steps 1 and 3 are
+enough; step 2 can be skipped if only this experiment runs. Sounds are one natural [bi] token mixed into
+speech-shaped noise at the SNR the staircase asks for, written per trial into `data\<id>_<date>_snr\` (~130 MB per
+session; delete after copying the csv, every wav can be rebuilt from the logged seed + dB).
+
+Double-click **`6b_check_grt_audio.bat`** once per PC (mixes a few stimuli and checks the realised SNR), then
+**`6_run_grt.bat`** per participant. It refuses to run without a headphone-like output device; pin one with
+`1b_set_audio.bat` first. `6_run_grt.bat --pilot` opens a window instead of fullscreen. Session length ~75–90 min:
+72 + 72 calibration trials (each a full memory trial), 15 practice with feedback, 576 main trials in 4 blocks.
+
+Linux: `Visual_AudioWM\RUN_GRTv3_ON_LINUX.md`.
