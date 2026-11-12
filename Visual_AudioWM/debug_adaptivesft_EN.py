@@ -42,7 +42,12 @@ def ok(msg):
     print("  ✔ " + msg)
 
 
+N_BAD = 0
+
+
 def bad(msg):
+    global N_BAD
+    N_BAD += 1
     print("  ✘ " + msg)
 
 
@@ -62,7 +67,7 @@ try:
     ok(f"numpy {np.__version__}  scipy {scipy.__version__}")
 except Exception as e:
     bad(f"numpy/scipy failed to load: {e}")
-    raise SystemExit
+    sys.exit(1)
 try:
     import psychopy
     ok(f"psychopy {psychopy.__version__}")
@@ -106,7 +111,7 @@ if found is None:
     bad("no location has adaptivesft/psi.py")
     fix("git clone https://github.com/shadowcrow0/adaptiveSFT.git next to this repo, "
         "or add its path to KNOWN_FORK_PATHS in this file, or set the env var ADAPTIVESFT_PATH")
-    raise SystemExit
+    sys.exit(1)
 if not os.environ.get("ADAPTIVESFT_PATH"):
     os.environ["ADAPTIVESFT_PATH"] = found
     print(f"  (ADAPTIVESFT_PATH = {found} set automatically for this run)")
@@ -126,13 +131,13 @@ try:
 except Exception:
     bad("import adaptive_vawm failed:")
     traceback.print_exc()
-    raise SystemExit
+    sys.exit(1)
 if not hasattr(A, "PsiCalibrator"):
     bad("this adaptive_vawm.py is the old API (has ColourCalibrator/AudioCalibrator, no PsiCalibrator/LNRMCalibrator)")
     print(f"    file: {A.__file__}")
     fix("this folder is not the latest GitHub main (a ZIP from before 2026-10-02). "
         "re-clone / download main into a new folder and run again; save a copy of any hand-edited VAWM_calibrate.py in the old folder first")
-    raise SystemExit
+    sys.exit(1)
 for name in ("next_intensity", "update_at", "nearest_index", "estimate"):
     (ok if hasattr(A.Psi, name) or name == "next_intensity" else bad)(f"Psi.{name}")
 try:
@@ -140,7 +145,7 @@ try:
     ok(f"d' table: {len(conf)} consonants (stimuli/consonant_dprime.csv)")
 except Exception as e:
     bad(f"load_dprime failed: {e} — stimuli/consonant_dprime.csv missing? re-download main or run make_sound_pairs.py")
-    raise SystemExit
+    sys.exit(1)
 
 hdr(3, "METHOD capability check")
 ok("psi: needs only psi.py + numpy + scipy → available")
@@ -351,5 +356,6 @@ else:
         traceback.print_exc()
 
 print("\n" + "=" * W)
-print("DEBUG finished. If no ✘ appeared, the calibration chain works in this environment.")
+print(f"DEBUG finished: {N_BAD} problem(s). " + ("The calibration chain works in this environment." if not N_BAD else "Fix the ✘ lines above."))
 print("=" * W)
+sys.exit(1 if N_BAD else 0)     # 0_setup_windows.bat / CI read the exit code

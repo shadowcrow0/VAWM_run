@@ -8,6 +8,7 @@ sits, except that **PsychoPy must be installed** at `C:\Program Files\PsychoPy` 
 
 ```
 VAWM_run\
+   0_setup_windows.bat        ONE-CLICK: find PsychoPy, install PyMC, probe audio, run both checks  (every new PC; steps 1-3 in one go)
    1_check_audio.bat          list the sound devices, open each one, play a 1 s tone   (every new PC)
    1b_set_audio.bat           remember the headphone device by name                     (every new PC)
    2_install_pymc.bat         install PyMC + nutpie into PsychoPy                        (once per PC, needs internet)
@@ -23,6 +24,15 @@ VAWM_run\
 ```
 
 The scripts find `adaptiveSFT` because it sits next to `Visual_AudioWM`. Keep the two folders side by side.
+
+## Step 0 — one-click setup (every new PC)
+
+Double-click **`0_setup_windows.bat`**. It finds PsychoPy's python (`C:\Program Files\PsychoPy`, or pass the
+folder as the first argument), installs PyMC + nutpie + `adaptiveSFT` (set `SKIP_INSTALL=1` to skip), lists and
+opens the audio devices and plays the tone, runs the SFT diagnostic and the GRT sound self-check, and ends with
+`READY` or `NOT READY: <which steps>`. Details go to `setup_log.txt`, `setup_sft_check.txt` and `audio_devices.json`
+next to the bat. To pin the headphones in the same run: `0_setup_windows.bat "" "Headphones"`.
+Steps 1–3 below are the same things one at a time, for when a single step needs redoing.
 
 ## Step 1 — find the headphones (every new PC)
 
