@@ -1,5 +1,5 @@
 """
-Adaptive calibration for VAWM_nobox.py: each participant first calibrates the colour distance (block 1) and the consonant confusability (block 2) with LNRMCalibrator (original adaptiveSFT, needs PyMC) or PsiCalibrator (numpy + scipy), and the calibrated H / L then produce stimuli/block1..6.csv; this file does not touch PsychoPy (the screen is in VAWM_calibrate.py).
+Adaptive calibration for SFT_WM_nochange_EN.py (historically VAWM_nobox.py, now archive/legacy_vawm_nobox/): each participant first calibrates the colour distance (block 1) and the consonant confusability (block 2) with LNRMCalibrator (original adaptiveSFT, needs PyMC) or PsiCalibrator (numpy + scipy), and the calibrated H / L then produce stimuli/block1..6.csv; this file does not touch PsychoPy (the screen is in SFT_WM_nochange_EN.py).
 """
 import csv
 import importlib

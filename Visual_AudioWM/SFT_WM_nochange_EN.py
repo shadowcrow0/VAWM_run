@@ -9,7 +9,7 @@ SFT_WM_nochange.py: the readable single-file version of the SFT experiment (noch
 
 Outputs (all in data/):
     <subj>_simple_calib_trials.csv   every calibration trial (plain csv)
-    <subj>_simple_calib.json         the calibrated H / L (make_adaptive_blocks.py can read it too)
+    <subj>_simple_calib.json         the calibrated H / L
     <subj>_simple_main.csv           one row per probe of the main task (adaptive_vawm.analyze_vawm can read it)
     <subj>_SFT_WM_<date>.csv / .psydat / .log   PsychoPy standard format (ExperimentHandler; all calibration + practice + main trials)
 """
@@ -33,13 +33,11 @@ QUICK = "--quick" in sys.argv
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
-LEVELS_COLOUR = [2.0, 6.0, 12.0, 25.0, 50.0, 90.0]
-LEVELS_AUDIO = [0.4, 0.9, 1.5, 2.3, 3.3, 4.5]  # consonant dissimilarity in d' (Miller-Nicely / Luce via mdsdt; adaptive_vawm.load_dprime)
+# LEVELS_COLOUR / LEVELS_AUDIO / H_TARG / L_TARG live in adaptive_vawm_EN.py (one source of truth; imported below)
 N_PER_LEVEL = 5
 P_MATCH = 1 / 4
 N_WARMUP = 10
 N_FILLER = 8
-H_TARG, L_TARG = 8.0, 1.3
 FIT_KW = dict(tune=1000, draws=1000, chains=4, nuts_sampler="nutpie")
 RT_MIN, RT_MAX = 0.15, 3.0
 N_BLOCKS = 6
@@ -56,7 +54,8 @@ if QUICK:
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
-from adaptive_vawm_EN import (TALKERS, audio_x, delta_e, find_colour_at, foil_for,  # noqa: E402
+from adaptive_vawm_EN import (H_TARG_DEFAULT as H_TARG, L_TARG_DEFAULT as L_TARG, LEVELS_AUDIO, LEVELS_COLOUR,  # noqa: E402
+                           TALKERS, audio_x, delta_e, find_colour_at, foil_for,
                            from_model_units, lab_to_hex, load_dprime, load_full_package, random_target,
                            sound_file, to_model_units)
 DPRIME = load_dprime()

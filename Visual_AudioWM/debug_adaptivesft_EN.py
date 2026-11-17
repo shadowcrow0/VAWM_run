@@ -83,7 +83,7 @@ except Exception as e:
     bad(f"pymc missing ({type(e).__name__}) → METHOD='lnrm' will crash after the 72 trials, at the 'Calculating' screen")
     fix("in this PsychoPy Coder environment only METHOD='psi' works; for lnrm set up the conda environment as described in adaptive_vawm.md")
     HAVE_PYMC = False
-for f in ("adaptive_vawm_EN.py", "audio_pick.py", "generate_trials.py", "stimuli/T01_b3.wav", "stimuli/T12_p3.wav"):
+for f in ("adaptive_vawm_EN.py", "audio_pick.py", "stimuli/consonant_dprime.csv", "stimuli/T01_b3.wav", "stimuli/T12_p3.wav"):
     (ok if os.path.exists(f) else bad)(f"{f}")
 
 hdr(1, "find the adaptiveSFT fork (must contain adaptivesft/psi.py)")
@@ -136,7 +136,7 @@ if not hasattr(A, "PsiCalibrator"):
     bad("this adaptive_vawm.py is the old API (has ColourCalibrator/AudioCalibrator, no PsiCalibrator/LNRMCalibrator)")
     print(f"    file: {A.__file__}")
     fix("this folder is not the latest GitHub main (a ZIP from before 2026-10-02). "
-        "re-clone / download main into a new folder and run again; save a copy of any hand-edited VAWM_calibrate.py in the old folder first")
+        "re-clone / download main into a new folder and run again; save a copy of any hand-edited script in the old folder first")
     sys.exit(1)
 for name in ("next_intensity", "update_at", "nearest_index", "estimate"):
     (ok if hasattr(A.Psi, name) or name == "next_intensity" else bad)(f"Psi.{name}")
@@ -343,10 +343,9 @@ else:
         traceback.print_exc()
     try:
         _src = open("SFT_WM_nochange_EN.py", encoding="utf-8").read()
-        _m = re.search(r"\nH_TARG, L_TARG = ([^#\n]+)", _src)
-        _lv = re.search(r"\nLEVELS_COLOUR = ([^#\n]+)", _src)
         _np = re.search(r"\nN_PER_LEVEL = (\d+)", _src)
-        ok(f"SFT_WM_nochange_EN.py: targets {_m.group(1).strip()}  colour levels {_lv.group(1).strip()}  per level {_np.group(1)}")
+        ok(f"SFT_WM_nochange_EN.py: targets {A.H_TARG_DEFAULT} / {A.L_TARG_DEFAULT}  colour levels {A.LEVELS_COLOUR}  "
+           f"sound levels {A.LEVELS_AUDIO}  per level {_np.group(1)}   (levels/targets defined once, in adaptive_vawm_EN.py)")
         _cal = A.LNRMCalibrator("colour", seed=1)
         _t = _cal.next_trial()
         ok(f"first calibration trial can be built: probe {_t['probe_colour']} + {_t['probe_sound']}"

@@ -22,6 +22,7 @@ echo ==== VAWM setup %DATE% %TIME% ==== > "%LOG%"
 REM ---- 1. PsychoPy python ------------------------------------------------------
 set "PY="
 if not "%~1"=="" if exist "%~1\python.exe" set "PY=%~1\python.exe"
+if not defined PY if exist "%ROOT%_env.bat" (call "%ROOT%_env.bat" >nul 2>&1 && if exist "!PSYCHOPY_PY!" set "PY=!PSYCHOPY_PY!")
 if not defined PY if exist "C:\Program Files\PsychoPy\python.exe" set "PY=C:\Program Files\PsychoPy\python.exe"
 if not defined PY if exist "%LOCALAPPDATA%\Programs\PsychoPy\python.exe" set "PY=%LOCALAPPDATA%\Programs\PsychoPy\python.exe"
 if not defined PY for /d %%D in ("C:\Program Files\PsychoPy*") do if exist "%%D\python.exe" set "PY=%%D\python.exe"

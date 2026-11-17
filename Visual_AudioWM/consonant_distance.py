@@ -96,7 +96,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TABLES_JSON = os.path.join(HERE, "review", "data", "miller_nicely_1955_tables_I-VI.json")
-CONFUSION_PY = os.path.join(HERE, "generate_trials.py")
+CONFUSION_PY = os.path.join(HERE, "archive", "legacy_vawm_nobox", "generate_trials.py")   # 舊聲音軸的次數表；只給 confusion 指標用
 OUT_CSV = os.path.join(HERE, "review", "data", "consonant_distance_all_pairs.csv")
 OUT_TXT = os.path.join(HERE, "review", "data", "consonant_distance_summary.txt")
 
