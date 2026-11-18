@@ -16,7 +16,7 @@ nothing depends on a hard-coded path. PowerShell throughout. Not executed on a W
 | | why | check |
 |---|---|---|
 | Standalone PsychoPy, 2024.2 or newer | the experiment, the audio backend, and the Python we run everything with | installed from psychopy.org |
-| git | to get and update this folder | `git --version` |
+| git (optional) | to get and update this folder; without it, download the zip (step 1b) | `git --version` |
 | headphones | `--require-headphones` refuses speakers; over speakers the delivered SNR is not the configured SNR | plugged in before step 4 |
 
 Everything is run with **PsychoPy's own python.exe**, never with another Python on the machine. PsychoPy's
@@ -24,13 +24,32 @@ Python already has numpy, scipy, pandas, psychtoolbox; we add PyMC, nutpie and `
 
 ## 1. Get the code
 
+**1a. With git**
+
 ```powershell
 git clone https://github.com/shadowcrow0/VAWM_run.git
 cd VAWM_run
 ```
 
-Later updates: `git pull` in the same folder. Participant data in `Visual_AudioWM\data\` are ignored by git and
-never pushed from here.
+Later updates: `git pull` in the same folder.
+
+**1b. Without git** (nothing to install; PowerShell downloads and unpacks the current snapshot)
+
+```powershell
+cd $HOME\Documents
+Invoke-WebRequest -Uri https://github.com/shadowcrow0/VAWM_run/archive/refs/heads/main.zip -OutFile VAWM_run.zip
+Expand-Archive -Path VAWM_run.zip -DestinationPath . -Force
+Rename-Item VAWM_run-main VAWM_run        # the zip unpacks as VAWM_run-main
+cd VAWM_run
+```
+
+To update later, repeat 1b into a fresh folder and copy your `Visual_AudioWM\data\`, `psychopy_path.txt` and
+`Visual_AudioWM\audio_device.txt` across (or just download again and redo steps 2 and 5; they take a minute).
+
+If you would rather have git: `winget install --id Git.Git -e` in an administrator PowerShell, then open a new
+window and use 1a.
+
+Participant data in `Visual_AudioWM\data\` are never pushed from here; send them to the private repository.
 
 ## 2. Find PsychoPy's python.exe
 
