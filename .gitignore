@@ -5,3 +5,4 @@ Visual_AudioWM/audio_device.txt
 # participant data stay out of this public repository
 Visual_AudioWM/data/*
 !Visual_AudioWM/data/.keep
+psychopy_path.txt

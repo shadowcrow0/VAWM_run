@@ -24,6 +24,8 @@ VAWM_run\
    adaptiveSFT\               the model-fitting package the calibration uses
 ```
 
+If a batch file says `PsychoPy python not found`, the new PsychoPy build keeps python.exe somewhere the scripts do not look. Open PsychoPy Coder, click the **Shell** tab, run `import sys; print(sys.executable)`, and paste the printed path when the batch file asks for it (or write it into `psychopy_path.txt` next to the batch files). It is saved and used from then on.
+
 The scripts find `adaptiveSFT` because it sits next to `Visual_AudioWM`. Keep the two folders side by side.
 
 ## Step 0 — one-click setup (every new PC)
