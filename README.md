@@ -15,6 +15,7 @@ VAWM_run\
    3_check_everything.bat     one-click diagnostic of the whole chain                    (every new PC)
    4_sound_perception.bat     pure perception test of the consonants, ~6 min            (per participant, before the experiment)
    4b_sound_perception_features.bat   same test, Miller-Nicely feature-distance axis (1..5) (per participant)
+   4c_sound_perception_snr.bat   the SNR pilot: step 4 on the d' axis with both syllables in noise; run at 0, -6, -12 dB
    5_run_experiment.bat       the real experiment                                        (per participant)
    5_run_experiment_robot.bat the same script with a simulated participant, no window    (optional self-test)
    6_run_grt.bat              the GRT experiment (GRTv3_ada_EN.py), headphones required   (per participant; no PyMC needed)
