@@ -33,7 +33,7 @@ QUICK = "--quick" in sys.argv
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
-# LEVELS_COLOUR / LEVELS_AUDIO / H_TARG / L_TARG live in adaptive_vawm_EN.py (one source of truth; imported below)
+# LEVELS_COLOUR / LEVELS_AUDIO / CALIB_LINK / CALIB_BIAS / CALIB_PLATEAU live in adaptive_vawm_EN.py (one source of truth; imported below)
 N_PER_LEVEL = 5
 P_MATCH = 1 / 4
 N_WARMUP = 10
@@ -56,9 +56,9 @@ if QUICK:
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
-from adaptive_vawm_EN import (H_TARG_DEFAULT as H_TARG, L_TARG_DEFAULT as L_TARG, LEVELS_AUDIO, LEVELS_COLOUR,  # noqa: E402
-                           TALKERS, audio_x, delta_e, find_colour_at, foil_for,
-                           from_model_units, lab_to_hex, load_dprime, load_full_package, random_target,
+from adaptive_vawm_EN import (CALIB_BIAS, CALIB_LINK, CALIB_PLATEAU, LEVELS_AUDIO, LEVELS_COLOUR,  # noqa: E402
+                           TALKERS, audio_x, delta_e, find_colour_at, fit_points, foil_for,
+                           lab_to_hex, load_dprime, load_full_package, random_target,
                            sound_file, to_model_units)
 import sft_noise  # noqa: E402
 DPRIME = load_dprime()
@@ -203,7 +203,8 @@ else:
         if is_match:
             return ("n" if rng.uniform() < 0.10 else "y"), 0.8
         u = to_model_units(dim, x)
-        rt, correct = lnrm_random([1.0 * u - 0.12 * u * u], 1.0, 0.5, 0.2, rng)
+        # same/different observer: at zero difference "same" leads by 1.0 (b0), so P(different) is at the floor, not 50 % (DECISIONS 25)
+        rt, correct = lnrm_random([-1.0 + 1.0 * u - 0.12 * u * u], 1.0, 0.5, 0.2, rng)
         return ("n" if correct[0] == 1 else "y"), float(rt[0])
 
 os.makedirs("data", exist_ok=True)
@@ -345,35 +346,18 @@ def calibrate(dim, log_rows):
         msg.draw(); win.flip()
     else:
         print("  fitting...")
-    load_full_package()
-    from adaptivesft.models import make_data
-    from adaptivesft.models_v2 import fit_lnrm_v2 as fit_lnrm   # PyMC built-in LogNormal logp/logcdf version (DECISIONS 14)
-    from adaptivesft.salience import find_salience
     use = [r for r in log_rows if r["dim"] == dim and r["other"] == "T" and not r["is_match"] and r["key"] is not None
            and RT_MIN <= r["rt"] <= RT_MAX]
-    data = make_data([to_model_units(dim, r["x"]) for r in use], [r["rt"] for r in use], [r["correct"] for r in use])
     t0 = time.time()
-    trace = fit_lnrm(data, link="quadratic", **FIT_KW)
-    res = find_salience(trace, h_targ=H_TARG, l_targ=L_TARG, alpha2_rule="filter")
-    high = from_model_units(dim, res["high"]["intensity"])
-    low = from_model_units(dim, res["low"]["intensity"])
-    lo_lim, hi_lim = min(levels), max(levels)
-    if not (np.isfinite(high) and np.isfinite(low)):
-        print(f"  ⚠ [{dim}] the fit could not solve for H/L ({res['warnings']}); using middle levels for now; this participant's calibration must be redone")
-        high, low = levels[-2], levels[1]
-    in_range = bool(lo_lim <= low < high <= hi_lim)
-    if not in_range:
-        print(f"  ⚠ [{dim}] the fitted H={high:.2f} L={low:.2f} is outside the presentable range [{lo_lim}, {hi_lim}]; clipped; "
-              "this participant's calibration must be redone or the data checked")
-        high = float(np.clip(high, lo_lim, hi_lim))
-        low = float(np.clip(low, lo_lim, hi_lim))
-        if low >= high:
-            low = lo_lim
+    res = fit_points([r["x"] for r in use], [r["rt"] for r in use], [r["correct"] for r in use], dim, levels, FIT_KW)
+    high, low, in_range = res["high"], res["low"], res["in_range"]
+    for w in res["warnings"]:
+        print(f"  ⚠ [{dim}] {w}")
     aa = [r["key"] == "n" for r in log_rows if r["dim"] == dim and r["other"] == "T" and r["is_match"] and r["key"] is not None]
     out = dict(dim=dim, high=float(high), low=float(low), in_range=in_range,
                false_alarm=float(np.mean(aa)) if aa else None,
                n_used=len(use), fit_seconds=round(time.time() - t0), warnings=list(res["warnings"]),
-               extra=dict(method="lnrm_quadratic"))
+               extra=dict(res["extra"]))
     if dim == "audio":
         out["extra"]["dprime_high"] = float(high)
         out["extra"]["dprime_low"] = float(low)
@@ -464,7 +448,8 @@ def run_sets(n_sets, block, calib, rows, with_feedback):
 calib_rows = []
 colour = calibrate("colour", calib_rows)
 audio = calibrate("audio", calib_rows)
-calib = dict(info=dict(participant=SUBJ, method="lnrm", h_targ=H_TARG, l_targ=L_TARG), colour=colour, audio=audio)
+calib = dict(info=dict(participant=SUBJ, method=f"lnrm_{CALIB_LINK}{'+b0' if CALIB_BIAS else ''}", rule=f"L = 50 % point, H = plateau {CALIB_PLATEAU:g} (DECISIONS 25)"),
+             colour=colour, audio=audio)
 with open(f"data/{SUBJ}_simple_calib.json", "w", encoding="utf-8") as f:
     json.dump(calib, f, ensure_ascii=False, indent=2)
 

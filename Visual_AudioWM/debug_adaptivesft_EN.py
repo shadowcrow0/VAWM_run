@@ -344,7 +344,7 @@ else:
     try:
         _src = open("SFT_WM_nochange_EN.py", encoding="utf-8").read()
         _np = re.search(r"\nN_PER_LEVEL = (\d+)", _src)
-        ok(f"SFT_WM_nochange_EN.py: targets {A.H_TARG_DEFAULT} / {A.L_TARG_DEFAULT}  colour levels {A.LEVELS_COLOUR}  "
+        ok(f"SFT_WM_nochange_EN.py: fit lnrm_{A.CALIB_LINK}{'+b0' if A.CALIB_BIAS else ''}, L = 50 % point, H = plateau {A.CALIB_PLATEAU:g}  colour levels {A.LEVELS_COLOUR}  "
            f"sound levels {A.LEVELS_AUDIO}  per level {_np.group(1)}   (levels/targets defined once, in adaptive_vawm_EN.py)")
         _cal = A.LNRMCalibrator("colour", seed=1)
         _t = _cal.next_trial()

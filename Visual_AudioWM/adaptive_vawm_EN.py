@@ -106,10 +106,13 @@ CSV_COLUMNS = ["trial",
                "audio2_target_file", "audio2_H_file", "audio2_L_file"]
 TALKERS = ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11", "T12"]
 
-LEVELS_COLOUR = [8.0, 14.0, 20.0, 28.0, 40.0, 90.0]   # ΔE00; four levels on the 12-30 slope seen in three pilots, 90 as the ceiling check (DECISIONS 23)
+LEVELS_COLOUR = [8.0, 14.0, 20.0, 28.0, 45.0, 70.0]   # ΔE00; four levels on the 12-30 slope seen in three pilots, 45/70 on the bend and the plateau (DECISIONS 23, 25)
 LEVELS_AUDIO = [0.4, 0.9, 1.5, 2.3, 3.3, 4.5]     # d' (Miller-Nicely / Luce, see load_dprime); snapped per trial to the target consonant's available foils
-H_TARG_DEFAULT = 8.0
-L_TARG_DEFAULT = 1.3
+H_TARG_DEFAULT = 8.0           # Houpt's drift-separation targets: used by LNRMCalibrator (R-parity harness) and recorded in the json;
+L_TARG_DEFAULT = 1.3           # the experiment itself now calibrates on psychometric POINTS (below), DECISIONS 25
+CALIB_LINK = "ogival"         # Houpt's lnrm2a shape (½L·logistic), L estimated, plus a same/different criterion b0 (DECISIONS 25)
+CALIB_BIAS = True
+CALIB_PLATEAU = 0.9            # H = where d reaches 90 % of its ceiling (RT stops getting faster); L = the 50 % point (d_eff = 0)
 AUDIO_SHIFT = 0.0                                        # d' is already >= 0; no shift into model units
 
 
@@ -339,6 +342,50 @@ def from_model_units(dim, u):
     return u - AUDIO_SHIFT
 
 
+def fit_points(xs, rts, corrects, dim, levels, fit_kw):
+    """The experiment's calibration fit (DECISIONS 25): lnrm2a (ogival link, L estimated) + criterion b0, then the two
+    psychometric points — L = 50 % point (d_eff = 0), H = plateau (logistic = CALIB_PLATEAU). Posterior MEDIANS: the
+    roots are ratio-type quantities whose mean is dominated by a few extreme draws (EN01, 2026-11-18).
+
+    Out-of-range policy, in this order, every step printed in `warnings`:
+      * no 50 % point (b0 ≥ 0: says "different" even at zero difference) -> L = lowest level
+      * no plateau                                                        -> H = highest level
+      * clip both into [min(levels), max(levels)]
+      * L ≥ H after that                                                  -> H = highest level (never lower L: the
+        old rule `low = lo_lim` turned one bad H into H = L = 2 for EN01)
+    Returns dict(high, low, in_range, warnings, extra); xs in stimulus units (ΔE or d′), rts in s, corrects 0/1."""
+    load_full_package()
+    from adaptivesft.models import make_data
+    from adaptivesft.models_v2 import fit_lnrm_v2
+    from adaptivesft.salience import find_points
+    data = make_data([to_model_units(dim, x) for x in xs], list(rts), list(corrects))
+    trace = fit_lnrm_v2(data, link=CALIB_LINK, L="estimate", bias=CALIB_BIAS, **fit_kw)
+    pts = find_points(trace, plateau=CALIB_PLATEAU)
+    warnings = list(pts["warnings"])
+    lo_lim, hi_lim = float(min(levels)), float(max(levels))
+    low = from_model_units(dim, pts["low"]["median"])
+    high = from_model_units(dim, pts["high"]["median"])
+    if not np.isfinite(low):
+        warnings.append(f"no 50 % point ({pts['low']['dropped']:.0%} of draws unsolvable); L set to the lowest level {lo_lim}")
+        low = lo_lim
+    if not np.isfinite(high):
+        warnings.append(f"no plateau ({pts['high']['dropped']:.0%} of draws unsolvable); H set to the highest level {hi_lim}")
+        high = hi_lim
+    in_range = bool(lo_lim <= low < high <= hi_lim)
+    if not in_range:
+        warnings.append(f"fitted L={low:.2f} H={high:.2f} outside [{lo_lim}, {hi_lim}] or reversed; clipped")
+        low, high = float(np.clip(low, lo_lim, hi_lim)), float(np.clip(high, lo_lim, hi_lim))
+        if low >= high:
+            high = hi_lim
+    ci = lambda name: [from_model_units(dim, v) for v in pts[name]["ci90"]]
+    extra = dict(method=f"lnrm_{CALIB_LINK}{'+b0' if CALIB_BIAS else ''}", rule=pts["rule"],
+                 x50_median=from_model_units(dim, pts["low"]["median"]), x50_ci90=ci("low"), x50_unsolved=pts["low"]["dropped"],
+                 plateau_median=from_model_units(dim, pts["high"]["median"]), plateau_ci90=ci("high"), plateau_unsolved=pts["high"]["dropped"],
+                 params=pts["params"], varZ=float(np.median(trace.posterior["varZ"].values)),
+                 divergences=int(trace.sample_stats["diverging"].sum()), n_used=len(xs))
+    return dict(high=float(high), low=float(low), in_range=in_range, warnings=warnings, extra=extra)
+
+
 def make_result(dim, log, fa, alpha, beta, high, low, target_high, target_low, x_range, warnings, extra):
     """Calibration result: a plain dict, written straight to json."""
     in_range = bool(np.isfinite(high) and np.isfinite(low)
@@ -424,6 +471,7 @@ class PsiCalibrator:
 class LNRMCalibrator:
     """
     Same usage as PsiCalibrator, but x is fixed at a few levels with n_per_level trials each (shuffled), and finish() fits lnrm2 (PyMC, 20–40 s) and solves for the drift-separation targets h_targ / l_targ.
+    This is the Houpt-parity harness (tests, debug). The experiment's own fit is `fit_points` (DECISIONS 25).
 
         cal = LNRMCalibrator("colour", h_targ=2.0, l_targ=0.5, seed=1)
         for _ in range(cal.n_trials):
