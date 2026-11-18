@@ -39,8 +39,10 @@ ROBOT = "--robot" in sys.argv
 
 from adaptive_vawm_EN import (LEVELS_AUDIO, TALKERS, audio_x, feature_distance, foil_for,  # noqa: E402
                               foils_at_distance, load_dprime, sound_file)
+import sft_noise  # noqa: E402
 
 AXIS = sys.argv[sys.argv.index("--axis") + 1] if "--axis" in sys.argv else "pairs"      # pairs | dprime | features
+SNR_DB = float(sys.argv[sys.argv.index("--snr") + 1]) if "--snr" in sys.argv else None   # speech-shaped noise on both syllables (SNR pilot, DECISIONS 24); None = clean
 PAIRS_CSV = "stimuli/sound_pairs.csv"
 
 N_PER_LEVEL = 12 if AXIS == "dprime" else 14      # dprime: 6 levels x 12 = 72; features: 5 levels x 14 = 70; pairs: the table
@@ -190,15 +192,20 @@ show(f"Sound test ({len(trials)} trials, about 6 minutes)\n\n"
      "Answer after the second syllable, as quickly as you can, on every trial. "
      "You will see whether you were right.\n\nPress the space bar to begin.")
 
+MIX = None if SNR_DB is None or ROBOT else sft_noise.NoiseMixer(f"data/{SUBJ}_snr", SNR_DB)
 rows = []
 for i, t in enumerate(trials, 1):
-    key, rt = one_trial(t)
+    seeds = (sft_noise.seed_for("perc", i, 1), sft_noise.seed_for("perc", i, 2))     # two seeds: a "same" pair is the same consonant in different noise
+    played = dict(t, snd1=t["snd1"] if MIX is None else MIX.render(t["snd1"], seeds[0]),
+                  snd2=t["snd2"] if MIX is None else MIX.render(t["snd2"], seeds[1]))
+    t.update(snd_snr_db=SNR_DB, snd_seed_1=seeds[0], snd_seed_2=seeds[1])
+    key, rt = one_trial(played)
     correct = None if key is None else int(key == ("y" if t["is_same"] else "n"))
     feedback("No response" if key is None else ("Correct" if correct else "Wrong"))
     rows.append(dict(participant=SUBJ, trial=i, **t, key=key, rt=rt, correct=correct))
 
 os.makedirs("data", exist_ok=True)
-path = f"data/{SUBJ}_sound_perception{'' if AXIS == 'pairs' else '_' + AXIS}.csv"
+path = f"data/{SUBJ}_sound_perception{'' if AXIS == 'pairs' else '_' + AXIS}{'' if SNR_DB is None else f'_snr{SNR_DB:g}'}.csv"
 with open(path, "w", newline="", encoding="utf-8") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0]))
     w.writeheader()
@@ -219,7 +226,9 @@ same = [r for r in rows if r["is_same"] and r["key"] is not None]
 fa = sum(1 for r in same if r["key"] == "n") / max(len(same), 1)
 summary = dict(participant=SUBJ, axis=AXIS, n_trials=len(rows), n_no_response=sum(1 for r in rows if r["key"] is None),
                same_trials=len(same), false_alarm=fa, levels={})
-print(f"\n{SUBJ}: {len(rows)} trials, no response {summary['n_no_response']}, false alarm (same trials) {fa:.2f}")
+summary["snr_db"] = SNR_DB
+print(f"\n{SUBJ}: {len(rows)} trials, no response {summary['n_no_response']}, false alarm (same trials) {fa:.2f}"
+      + ("" if SNR_DB is None else f", speech-shaped noise at {SNR_DB:g} dB SNR"))
 print(f"  axis = {AXIS} (" + {"dprime": "d' axis LEVELS_AUDIO (Miller-Nicely / Luce via mdsdt)", "features": "number of differing Miller-Nicely features",
                             "pairs": "fixed table stimuli/sound_pairs.csv, Luce distance levels 1..5"}[AXIS] + ")")
 print(f"  {'level x':>8} {'n':>3} {'hit':>5} {'d-prime':>8} {'median RT':>10}")

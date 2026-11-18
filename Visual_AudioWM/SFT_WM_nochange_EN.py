@@ -48,6 +48,8 @@ RESP_WINDOW = 3.0
 OTHER_TARGETS_CHANGE = False
 PROV_DE_H, PROV_DE_L = 30.0, 6.0
 PROV_DPRIME_H, PROV_DPRIME_L = 4.3, 1.0      # provisional sound H / L (d') used while the colour dimension is being calibrated
+SND_SNR_DB = None            # speech-shaped noise on EVERY sound at this SNR (dB), the whole session; None = clean tokens.
+                             # Set after the SNR pilot (DECISIONS 24). Noise seed per presentation = sft_noise.seed_for(...), logged in snd_seed_*.
 if QUICK:
     FIT_KW = dict(tune=300, draws=300, chains=2, nuts_sampler="nutpie")
     N_BLOCKS, SETS_PER_BLOCK, N_PRACTICE_SETS = 1, 3, 1
@@ -58,6 +60,7 @@ from adaptive_vawm_EN import (H_TARG_DEFAULT as H_TARG, L_TARG_DEFAULT as L_TARG
                            TALKERS, audio_x, delta_e, find_colour_at, foil_for,
                            from_model_units, lab_to_hex, load_dprime, load_full_package, random_target,
                            sound_file, to_model_units)
+import sft_noise  # noqa: E402
 DPRIME = load_dprime()
 CONSONANTS = sorted(DPRIME)
 rng = np.random.default_rng()
@@ -85,6 +88,7 @@ if not ROBOT:
                                        dataFileName=f"data/{SUBJ}_SFT_WM_{_pdata.getDateStr()}",
                                        savePickle=True, saveWideText=True)
     _plog.LogFile(thisExp.dataFileName + ".log", level=_plog.EXP)
+    MIX = None if SND_SNR_DB is None else sft_noise.NoiseMixer(f"data/{SUBJ}_snr", SND_SNR_DB)
     win = visual.Window(fullscr=True, color="black", units="pix")
     fix = visual.TextStim(win, text="+", height=40, color="white")
     msg = visual.TextStim(win, text="", height=28, color="white", wrapWidth=1000,
@@ -171,6 +175,7 @@ if not ROBOT:
 
 else:
     SUBJ = "robot"
+    MIX = None                    # the robot never plays a sound; seeds are still computed and logged
     from scipy.stats import norm
 
     def show(text):
@@ -204,6 +209,14 @@ else:
 os.makedirs("data", exist_ok=True)
 
 
+def snd_path(wav, *tag):
+    """(path to play, noise seed) for one presentation. Seed = sft_noise.seed_for(*tag): fixed per trial and slot, the
+    same for every participant, different between the studied item and the probe (DECISIONS 24). Clean session: the
+    token itself, seed still logged."""
+    seed = sft_noise.seed_for(*tag)
+    return (wav if MIX is None else MIX.render(wav, seed)), seed
+
+
 def write_csv(path, rows):
     cols = []
     for r in rows:
@@ -231,7 +244,7 @@ def two_targets():
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════════════════════════════════════════════════
-def run_calib_trial(dim, x, other, fixed, fixed_cols):
+def run_calib_trial(dim, x, other, fixed, fixed_cols, tag):
     """Run one calibration trial: draw targets, decide is_match / other, find the probe colour+sound, call one_trial; shared by the warm-up and the 72 real trials, returns one data row (without trial number)."""
     t1, t2, s1, s2, k1, k2 = two_targets()
     if not OTHER_TARGETS_CHANGE:
@@ -271,11 +284,15 @@ def run_calib_trial(dim, x, other, fixed, fixed_cols):
         else:
             lab = find_colour_at(target_col, PROV_DE_H if other == "H" else PROV_DE_L, rng)
             probe_col = lab_to_hex(lab if lab is not None else target_col)
-    args = (lab_to_hex(t1), lab_to_hex(t2), sound_file(k1, s1), sound_file(k2, s2), probe_col, probe_snd)
+    p1, seed1 = snd_path(sound_file(k1, s1), *tag, "s1")
+    p2, seed2 = snd_path(sound_file(k2, s2), *tag, "s2")
+    pp, seedp = snd_path(probe_snd, *tag, "probe")
+    args = (lab_to_hex(t1), lab_to_hex(t2), p1, p2, probe_col, pp)
     key, rt = one_trial(*args, _info=(dim, x_actual, answer_same, other)) if ROBOT else one_trial(*args)
     correct = None if key is None else int(key == ("y" if answer_same else "n"))
     return dict(dim=dim, is_match=int(is_match), x_planned=x, x=round(x_actual, 3), other=other,
-                probe_col=probe_col, probe_snd=probe_snd, key=key, rt=rt, correct=correct)
+                probe_col=probe_col, probe_snd=probe_snd, key=key, rt=rt, correct=correct,
+                snd_snr_db=SND_SNR_DB, snd_seed_s1=seed1, snd_seed_s2=seed2, snd_seed_probe=seedp)
 
 
 def calibrate(dim, log_rows):
@@ -308,17 +325,18 @@ def calibrate(dim, log_rows):
                 fixed_cols[(wi, lev)] = lab_to_hex(lab if lab is not None else tcol)
 
     for i, (x, other) in enumerate(warmup_plan, 1):
-        row = run_calib_trial(dim, x, other, fixed, fixed_cols)
+        row = run_calib_trial(dim, x, other, fixed, fixed_cols, ("warmup", dim, i))
         feedback("No response" if row["key"] is None else ("Correct" if row["correct"] else "Wrong"))
         record(dict(phase=f"warmup_{dim}", trial=i, is_match=row["is_match"], x=row["x"], other=row["other"],
                     key=row["key"], rt=row["rt"], correct=row["correct"]))
     show("Practice done. From now on there is no feedback.\n\nPress the space bar to continue.")
 
     for i, (x, other) in enumerate(plan, 1):
-        row = run_calib_trial(dim, x, other, fixed, fixed_cols)
+        row = run_calib_trial(dim, x, other, fixed, fixed_cols, ("calib", dim, i))
         log_rows.append(dict(dim=row["dim"], trial=i, is_match=row["is_match"], x_planned=row["x_planned"],
                              x=row["x"], other=row["other"], probe_col=row["probe_col"], probe_snd=row["probe_snd"],
-                             key=row["key"], rt=row["rt"], correct=row["correct"]))
+                             key=row["key"], rt=row["rt"], correct=row["correct"], snd_snr_db=row["snd_snr_db"],
+                             snd_seed_s1=row["snd_seed_s1"], snd_seed_s2=row["snd_seed_s2"], snd_seed_probe=row["snd_seed_probe"]))
         write_csv(f"data/{SUBJ}_simple_calib_trials.csv", log_rows)
         record(dict(phase=f"calib_{dim}", **log_rows[-1]))
 
@@ -418,12 +436,16 @@ def set_probes():
 def run_sets(n_sets, block, calib, rows, with_feedback):
     for s in range(1, n_sets + 1):
         st = make_study_set(calib)
-        study(st["color1_target"], st["color2_target"], st["audio1_target_file"], st["audio2_target_file"])
+        p1, st["snd_seed_s1"] = snd_path(st["audio1_target_file"], "study", block, s, "s1")
+        p2, st["snd_seed_s2"] = snd_path(st["audio2_target_file"], "study", block, s, "s2")
+        st["snd_snr_db"] = SND_SNR_DB
+        study(st["color1_target"], st["color2_target"], p1, p2)
         for p, cond in enumerate(set_probes(), 1):
             name, col_key, snd_key = COND[cond]
             probe_col, probe_snd = st[col_key], st[snd_key]
-            key, rt = (probe_trial(probe_col, probe_snd, _info=("colour", 20.0 if name != "AA" else 0.0, name == "AA", "T"))
-                       if ROBOT else probe_trial(probe_col, probe_snd))
+            pp, seedp = snd_path(probe_snd, "probe", block, s, p)
+            key, rt = (probe_trial(probe_col, pp, _info=("colour", 20.0 if name != "AA" else 0.0, name == "AA", "T"))
+                       if ROBOT else probe_trial(probe_col, pp))
             correct = None if key is None else int(key == ("y" if name == "AA" else "n"))
             if with_feedback:
                 feedback("No response" if key is None else ("Correct" if correct else "Wrong"))
@@ -431,6 +453,7 @@ def run_sets(n_sets, block, calib, rows, with_feedback):
                        targetCol=probe_col, targetAud=probe_snd, correct=correct)
             row["ResponseBox.keys"] = key
             row["ResponseBox.rt"] = rt
+            row["snd_seed_probe"] = seedp
             row.update(st)
             rows.append(row)
             write_csv(f"data/{SUBJ}_simple_main.csv", rows)

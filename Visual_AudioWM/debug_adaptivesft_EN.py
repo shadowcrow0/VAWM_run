@@ -354,6 +354,18 @@ else:
         bad("could not read SFT_WM_nochange_EN.py / build the first trial:")
         traceback.print_exc()
 
+hdr(8, "sft_noise: speech-shaped noise mixing for the SFT tokens (used when SND_SNR_DB is set)")
+try:
+    import sft_noise
+    sft_noise.validate()
+    ok("sft_noise.validate(): realised SNR within 0.05 dB, seeds deterministic, rebuild bit-identical, files < 1 s")
+    _src = open("SFT_WM_nochange_EN.py", encoding="utf-8").read()
+    _snr = re.search(r"\nSND_SNR_DB = ([^ #\n]+)", _src).group(1)
+    ok(f"SFT_WM_nochange_EN.py: SND_SNR_DB = {_snr} ({'clean tokens' if _snr == 'None' else 'every sound mixed at that SNR'})")
+except Exception:
+    bad("sft_noise failed:")
+    traceback.print_exc()
+
 print("\n" + "=" * W)
 print(f"DEBUG finished: {N_BAD} problem(s). " + ("The calibration chain works in this environment." if not N_BAD else "Fix the ✘ lines above."))
 print("=" * W)
