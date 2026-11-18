@@ -106,7 +106,7 @@ CSV_COLUMNS = ["trial",
                "audio2_target_file", "audio2_H_file", "audio2_L_file"]
 TALKERS = ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11", "T12"]
 
-LEVELS_COLOUR = [2.0, 6.0, 12.0, 25.0, 50.0, 90.0]
+LEVELS_COLOUR = [8.0, 14.0, 20.0, 28.0, 40.0, 90.0]   # ΔE00; four levels on the 12-30 slope seen in three pilots, 90 as the ceiling check (DECISIONS 23)
 LEVELS_AUDIO = [0.4, 0.9, 1.5, 2.3, 3.3, 4.5]     # d' (Miller-Nicely / Luce, see load_dprime); snapped per trial to the target consonant's available foils
 H_TARG_DEFAULT = 8.0
 L_TARG_DEFAULT = 1.3
