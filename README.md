@@ -9,7 +9,7 @@
 > and paste the printed path (ends in `python.exe`). It is saved to `psychopy_path.txt` and every batch file uses it
 > from then on. Then run `4c_sound_perception_snr.bat` / `5_run_experiment.bat` as before.
 
-Windows from a terminal (PowerShell, every step explicit): `Visual_AudioWM/RUN_ON_WINDOWS_CLI.md`. Linux: `RUN_ON_LINUX.md` (SFT) and `Visual_AudioWM/RUN_GRTv3_ON_LINUX.md` (GRT). Mac, terminal: `RUN_ON_MAC.md` (both).
+Windows from a terminal (PowerShell, every step explicit): `RUN_ON_WINDOWS_CLI.md`. Linux: `RUN_ON_LINUX.md` (SFT) and `Visual_AudioWM/RUN_GRTv3_ON_LINUX.md` (GRT). Mac, terminal: `RUN_ON_MAC.md` (both).
 
 Copy this whole folder to the experiment PC (USB stick, OneDrive, anything). Nothing in it depends on where it
 sits, except that **standalone PsychoPy must be installed**. The batch files find its `python.exe` themselves
