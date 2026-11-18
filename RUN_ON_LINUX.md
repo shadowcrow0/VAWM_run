@@ -120,6 +120,7 @@ device. A `FAIL` line prints the fix.
 ```bash
 cd Visual_AudioWM
 python sound_perception_EN.py --require-headphones        # ~8 min, pure perception, fixed 80-pair table
+python sound_perception_EN.py --axis dprime --snr 6 --require-headphones   # the SNR pilot: run at 0, 6 and 12 dB (DECISIONS 24)
 python SFT_WM_nochange_EN.py --require-headphones          # the experiment: 2 calibrations → practice → 6 blocks
                                                            # drop --require-headphones if the device is only 'pulse' (see §3)
 python SFT_WM_nochange_EN.py --robot --quick               # self-test with a simulated participant, no window
