@@ -1,10 +1,19 @@
 # VAWM_run — everything needed to run the experiment, in one folder
 
+> **Start here (Windows).** Pull the latest VAWM_run (or re-download the zip). Then run `0_setup_windows.bat`.
+> If it still cannot find PsychoPy, it will ask for the path: open PsychoPy Coder, click the **Shell** tab at the
+> bottom, run
+> ```
+> import sys; print(sys.executable)
+> ```
+> and paste the printed path (ends in `python.exe`). It is saved to `psychopy_path.txt` and every batch file uses it
+> from then on. Then run `4c_sound_perception_snr.bat` / `5_run_experiment.bat` as before.
+
 Linux: see `RUN_ON_LINUX.md` (SFT) and `Visual_AudioWM/RUN_GRTv3_ON_LINUX.md` (GRT). Mac, terminal: `RUN_ON_MAC.md` (both).
 
 Copy this whole folder to the experiment PC (USB stick, OneDrive, anything). Nothing in it depends on where it
-sits, except that **PsychoPy must be installed** at `C:\Program Files\PsychoPy` (standalone PsychoPy, Python
-3.10). Edit the path at the top of the `.bat` files if PsychoPy lives somewhere else.
+sits, except that **standalone PsychoPy must be installed**. The batch files find its `python.exe` themselves
+(`_env.bat`); if they cannot, they ask once and remember the answer in `psychopy_path.txt`.
 
 ```
 VAWM_run\
