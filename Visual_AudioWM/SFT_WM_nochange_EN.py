@@ -38,7 +38,7 @@ N_PER_LEVEL = 5
 P_MATCH = 1 / 4
 N_WARMUP = 10
 N_FILLER = 8
-FIT_KW = dict(tune=1000, draws=1000, chains=4, nuts_sampler="nutpie")
+FIT_KW = dict(tune=1000, draws=1000, chains=4, nuts_sampler="nutpie", target_accept=0.95)   # 0.95: the ogival + b0 fit showed 10-24 divergences at the 0.9 default on EN01 s002 (DECISIONS 25)
 RT_MIN, RT_MAX = 0.15, 3.0
 N_BLOCKS = 6
 SETS_PER_BLOCK = 14
