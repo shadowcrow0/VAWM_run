@@ -93,9 +93,9 @@ if not ROBOT:
     fix = visual.TextStim(win, text="+", height=40, color="white")
     msg = visual.TextStim(win, text="", height=28, color="white", wrapWidth=1000,
                           alignText="left", anchorHoriz="center")
-    patch_l = visual.Rect(win, width=100, height=100, pos=(-200, 0), colorSpace="hex", lineColor="#808080")
-    patch_r = visual.Rect(win, width=100, height=100, pos=(200, 0), colorSpace="hex", lineColor="#808080")
-    patch_c = visual.Rect(win, width=100, height=100, pos=(0, 0), colorSpace="hex", lineColor="#808080")
+    patch_l = visual.Rect(win, width=100, height=100, pos=(-200, 0), colorSpace="hex", lineColor="black")   # no visible frame: same as the background (2026-11-24, DECISIONS 26)
+    patch_r = visual.Rect(win, width=100, height=100, pos=(200, 0), colorSpace="hex", lineColor="black")   # no visible frame: same as the background (2026-11-24, DECISIONS 26)
+    patch_c = visual.Rect(win, width=100, height=100, pos=(0, 0), colorSpace="hex", lineColor="black")   # no visible frame: same as the background (2026-11-24, DECISIONS 26)
     snd = sound.Sound("A", secs=1, stereo=True, hamming=True)
     clock = core.Clock()
     kb = keyboard.Keyboard(clock=clock)
