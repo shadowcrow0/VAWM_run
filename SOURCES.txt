@@ -1,6 +1,9 @@
-Snapshot of the run files of two GitHub repositories (no nested .git):
+Snapshot of the run files of two GitHub repositories (no nested .git), refreshed 2026-11-26:
 
-  Visual_AudioWM/  https://github.com/shadowcrow0/Visual_AudioWM  main   ee1d34c   (run files only: SFT_WM_nochange_EN, sound_perception_EN, adaptive_vawm_EN, audio_pick, debug_adaptivesft_EN, generate_trials, setup_pymc_coder.bat, stimuli/)
-  adaptiveSFT/     https://github.com/shadowcrow0/adaptiveSFT     master 548b7be   (the adaptivesft package + pyproject)
+  Visual_AudioWM/  https://github.com/shadowcrow0/Visual_AudioWM  main   3ea1651   (run files only: the list FILES in make_run_bundle.py, plus stimuli/)
+  adaptiveSFT/     https://github.com/shadowcrow0/adaptiveSFT     master 7d94317   (the adaptivesft package + pyproject)
 
-To refresh: in a checkout of Visual_AudioWM run  python make_run_bundle.py --repo <this folder>  and update this file.
+The three RUN_ON_*.md at the top level are copies of the ones in Visual_AudioWM/.
+
+To refresh: in a checkout of Visual_AudioWM run  python make_run_bundle.py --repo <this folder> ,
+copy RUN_ON_LINUX.md, RUN_ON_MAC.md and RUN_ON_WINDOWS_CLI.md to the top level, and update this file.

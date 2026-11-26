@@ -9,6 +9,12 @@
 > and paste the printed path (ends in `python.exe`). It is saved to `psychopy_path.txt` and every batch file uses it
 > from then on. Then run `4c_sound_perception_snr.bat` / `5_run_experiment.bat` as before.
 
+**Since 2026-11-26 every speech sound in the SFT experiment (`5_run_experiment.bat`) is mixed into speech-shaped noise
+at +3 dB** (`SND_SNR_DB = 3.0` in `Visual_AudioWM/SFT_WM_nochange_EN.py`, line 51). Sessions run from an older copy of
+this folder used clean speech and cannot be pooled with the new ones. The mixed wavs are written to
+`Visual_AudioWM\data\<id>_snr\`; delete them after copying the csv files (each can be rebuilt from the SNR and seed
+logged in its row). `3_check_everything.bat` prints the value in its group `[8]`.
+
 Windows from a terminal (PowerShell, every step explicit): `RUN_ON_WINDOWS_CLI.md`. Linux: `RUN_ON_LINUX.md` (SFT) and `Visual_AudioWM/RUN_GRTv3_ON_LINUX.md` (GRT). Mac, terminal: `RUN_ON_MAC.md` (both).
 
 Copy this whole folder to the experiment PC (USB stick, OneDrive, anything). Nothing in it depends on where it
@@ -24,7 +30,7 @@ VAWM_run\
    3_check_everything.bat     one-click diagnostic of the whole chain                    (every new PC)
    4_sound_perception.bat     pure perception test of the consonants, ~6 min            (per participant, before the experiment)
    4b_sound_perception_features.bat   same test, Miller-Nicely feature-distance axis (1..5) (per participant)
-   4c_sound_perception_snr.bat   the SNR pilot: step 4 on the d' axis with both syllables in noise; run at 0, -6, -12 dB
+   4c_sound_perception_snr.bat   step 4 on the d' axis with both syllables in noise; asks for the SNR (3 = the experiment's)
    5_run_experiment.bat       the real experiment                                        (per participant)
    5_run_experiment_robot.bat the same script with a simulated participant, no window    (optional self-test)
    6_run_grt.bat              the GRT experiment (GRTv3_ada_EN.py), headphones required   (per participant; no PyMC needed)

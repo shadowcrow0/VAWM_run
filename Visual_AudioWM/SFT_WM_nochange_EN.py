@@ -48,8 +48,8 @@ RESP_WINDOW = 3.0
 OTHER_TARGETS_CHANGE = False
 PROV_DE_H, PROV_DE_L = 30.0, 6.0
 PROV_DPRIME_H, PROV_DPRIME_L = 4.3, 1.0      # provisional sound H / L (d') used while the colour dimension is being calibrated
-SND_SNR_DB = None            # speech-shaped noise on EVERY sound at this SNR (dB), the whole session; None = clean tokens.
-                             # Set after the SNR pilot (DECISIONS 24). Noise seed per presentation = sft_noise.seed_for(...), logged in snd_seed_*.
+SND_SNR_DB = 3.0             # speech-shaped noise on EVERY sound at this SNR (dB), the whole session; None = clean tokens.
+                             # +3 dB set 2026-11-26 (DECISIONS 27; mechanism in DECISIONS 24). Noise seed per presentation = sft_noise.seed_for(...), logged in snd_seed_*.
 if QUICK:
     FIT_KW = dict(tune=300, draws=300, chains=2, nuts_sampler="nutpie")
     N_BLOCKS, SETS_PER_BLOCK, N_PRACTICE_SETS = 1, 3, 1
