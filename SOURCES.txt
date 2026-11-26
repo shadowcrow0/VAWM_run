@@ -1,6 +1,6 @@
 Snapshot of the run files of two GitHub repositories (no nested .git), refreshed 2026-11-26:
 
-  Visual_AudioWM/  https://github.com/shadowcrow0/Visual_AudioWM  main   3ea1651   (run files only: the list FILES in make_run_bundle.py, plus stimuli/)
+  Visual_AudioWM/  https://github.com/shadowcrow0/Visual_AudioWM  main   4e95ad6   (run files only: the list FILES in make_run_bundle.py, plus stimuli/)
   adaptiveSFT/     https://github.com/shadowcrow0/adaptiveSFT     master 7d94317   (the adaptivesft package + pyproject)
 
 The three RUN_ON_*.md at the top level are copies of the ones in Visual_AudioWM/.

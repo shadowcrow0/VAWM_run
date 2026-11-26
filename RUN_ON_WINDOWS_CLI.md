@@ -109,7 +109,8 @@ Expect the last line to show line 51 of the file as `SND_SNR_DB = 3.0` (and the 
 shows `SND_SNR_DB = None`, the bundle predates 2026-11-26, the day the session SNR was set: the experiment would play
 every sound without noise, and the guides inside the bundle are the older ones. Ask for the bundle to be refreshed
 (`make_run_bundle.py:4`, run in the source repository) and get it again, or use 1c. On 2026-11-26 a fresh clone
-(1a) showed `2026-11-24` and `None`. The value shows up a second time in step 5, in group `[8]` of
+(1a) showed `2026-11-24` and `None`; the bundle was refreshed later the same day (commit `67a437f`) and has
+shown `3.0` since. The value shows up a second time in step 5, in group `[8]` of
 `debug_adaptivesft_EN.py`.
 
 Participant data in `Visual_AudioWM\data\` never go into the public VAWM_run repository; they go back to the
